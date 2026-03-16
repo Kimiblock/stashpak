@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	alpm "github.com/Jguer/go-alpm/v2"
+	"github.com/BurntSushi/toml"
 )
 
 var (
@@ -56,6 +58,26 @@ type DependsSection struct {
 
 type envConf struct {
 	elevateProgram		string
+}
+
+func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
+	var res pkgConf
+	file, err := os.Open(path)
+	if err != nil {
+		warn.Fatalln("Could not open package metadata:", err)
+		return res, err
+	}
+	reader := bufio.NewReader(file)
+	decoder := toml.NewDecoder(reader)
+	meta, err := decoder.Decode(&res)
+	if err != nil {
+		warn.Fatalln("Could not decode package metadata:", err)
+		return res, err
+	}
+	if meta.Undecoded() != nil {
+		warn.Println("Undecoded content:", meta.Undecoded())
+	}
+	return res, nil
 }
 
 func elevator(debug *log.Logger, warn *log.Logger) {
