@@ -1,0 +1,237 @@
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+
+	alpm "github.com/Jguer/go-alpm/v2"
+)
+
+var (
+	conf		envConf
+	xdgDir		xdg
+	elevate		= make(chan elevateRequest, 2)
+)
+
+// Client must initialize success / error channel!
+type elevateRequest struct {
+	cmdline		[]string
+	timeout		time.Duration
+	err		chan error
+}
+
+type xdg struct {
+	runtimeDir		string
+	confDir			string
+	cacheDir		string
+	dataDir			string
+	home			string
+}
+
+type pkgConf struct {
+	// Arrays of tables containing dependencies not from core/extra
+	Depends		[]DependsSection
+	Metadata	confMeta
+}
+
+type confMeta struct {
+	// The build prefix. Defaults to "extra-x86_64-build".
+	BuildPrefix	string
+	// GitHub user name of Maintainer
+	Maintainer	string
+}
+
+type DependsSection struct {
+	Pkgname		string
+	// Source can be either a string of git URL (type git), or repo name (type repo) to download from locally defined repositories.
+	SourceType	string
+	Source		string
+	// The build prefix for type git. Defaults to "extra-x86_64-build".
+	BuildPrefix	string
+}
+
+type envConf struct {
+	elevateProgram		string
+}
+
+func elevator(debug *log.Logger, warn *log.Logger) {
+	var hasLoop bool
+	for sig := range elevate {
+		if hasLoop == false {
+			hasLoop = true
+			time.Sleep(2 * time.Minute)
+			for {
+				ctx := context.TODO()
+				ctxNew, canc := context.WithTimeout(ctx, 5 * time.Second)
+				cmd := exec.CommandContext(ctxNew, conf.elevateProgram, "true")
+				cmd.Stderr = os.Stderr
+				err := cmd.Run()
+				canc()
+				if err != nil {
+					warn.Println("Could not loop elevate status:", err)
+					break
+				}
+			}
+		}
+		go func () {
+			signal := sig
+			if signal.timeout == 0 {
+				cmd := exec.Command(signal.cmdline[0], signal.cmdline[1:]...)
+				cmd.Stderr = os.Stderr
+				err := cmd.Run()
+				if err != nil {
+					warn.Println("Elevated command has failed:", err)
+					signal.err <- err
+				} else {
+					signal.err <- nil
+				}
+			} else {
+				ctx := context.TODO()
+				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
+				cmd := exec.CommandContext(ctxTimeout, signal.cmdline[0], signal.cmdline[1:]...)
+				err := cmd.Run()
+				cancelFunc()
+				if err != nil {
+					warn.Println("Elevated command has failed:", err)
+					signal.err <- err
+				} else {
+					signal.err <- nil
+				}
+			}
+		} ()
+	}
+}
+
+// Returns the absolute location of a package file
+func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
+	debug.Println("Obtaining package file for", pkgname)
+	cmdline := []string{"pacman", "-Spw", pkgname}
+	ctx := context.TODO()
+	ctxNew, cancelFunc := context.WithTimeout(ctx, 5 * time.Second)
+	cmd := exec.CommandContext(ctxNew, cmdline[0], cmdline[1:]...)
+	out, err := cmd.Output()
+	cancelFunc()
+	if err != nil {
+		warn.Fatalln("Command", cmdline, "has failed:", err)
+	}
+	res, present := strings.CutPrefix(string(out), "https://")
+	if present {
+		var req elevateRequest
+		req.err = make(chan error, 1)
+		req.cmdline = []string{
+			"pacman",
+			"-Sw",
+			pkgname,
+		}
+		elevate <- req
+		err := <- req.err
+		if err != nil {
+			warn.Fatalln("Could not download package:", err)
+		}
+	}
+	res, present = strings.CutPrefix(string(out), "file://")
+	if present {
+		return res
+	} else {
+		warn.Fatalln("Could not download package:", "pacman returned unknown URI:", res)
+		return res
+	}
+
+
+
+
+}
+
+func lookUpXDG(debug *log.Logger, warn *log.Logger) {
+	xdgDir.runtimeDir = os.Getenv("XDG_RUNTIME_DIR")
+	if len(xdgDir.runtimeDir) == 0 {
+		warn.Fatalln("XDG_RUNTIME_DIR not set")
+	} else {
+		runtimeDirInfo, errRuntimeDir := os.Stat(xdgDir.runtimeDir)
+		if errRuntimeDir != nil {
+			warn.Fatalln("Could not determine the status of XDG Runtime Directory", errRuntimeDir)
+		}
+		if runtimeDirInfo.IsDir() == false {
+			warn.Fatalln("XDG_RUNTIME_DIR is not a directory")
+		}
+	}
+
+	var cacheErr error
+	var homeErr error
+	var confErr error
+	xdgDir.home, homeErr = os.UserHomeDir()
+	if homeErr != nil {
+		warn.Fatalln("Could not determine user home:", homeErr)
+	}
+
+	xdgDir.cacheDir, cacheErr = os.UserCacheDir()
+	if cacheErr != nil {
+		warn.Fatalln("Could not find XDG cache directory:", cacheErr)
+	}
+
+	xdgDir.confDir, confErr = os.UserConfigDir()
+	if confErr != nil {
+		warn.Fatalln("Could not find XDG config home:", confErr)
+	}
+
+	datahome := os.Getenv("XDG_DATA_HOME")
+	if len(datahome) > 0 {
+		xdgDir.dataDir = datahome
+	} else {
+		xdgDir.dataDir = xdgDir.home + "/.local/share"
+		debug.Println("Using default data home: " + xdgDir.dataDir)
+	}
+}
+
+func processOpts(logger *log.Logger) {
+	elevate := os.Getenv("stashPakElevateProgram")
+	if len(elevate) > 0 {
+		if path, err := exec.LookPath(elevate); err == nil {
+			conf.elevateProgram = path
+		} else {
+			logger.Println("Could not resolve elevate binary path:", err)
+		}
+
+	}
+}
+
+func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
+	cmdSlice := os.Args[1:]
+	logger.Println()
+	var skipCounter int
+
+	for _, val := range cmdSlice {
+		if skipCounter > 0 {
+			skipCounter--
+			continue
+		}
+		switch val {
+			default:
+				warn.Println("Unknown argument")
+		}
+	}
+}
+
+func main () {
+	debug := log.New(os.Stdout, "[StashPak]: ", 0)
+	warn := log.New(os.Stderr, "[Warning] [StashPak]: ", 0)
+	lookUpXDG(debug, warn)
+	processOpts(debug)
+	go elevator(debug, warn)
+
+	handler, err := alpm.Initialize("/", "/var/lib/pacman")
+	if err != nil {
+		panic("Could not initialize alpm: " + err.Error())
+	}
+	defer handler.Release()
+	db, err := handler.LocalDB()
+	if err != nil {
+		panic("Could not initialize alpm: " + err.Error())
+	}
+	debug.Println("Initialized ALPM handler for database:", db.Name())
+	cmdlineDispatcher(debug, warn)
+}
