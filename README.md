@@ -7,8 +7,8 @@ stashpak [action] (...arguments)
 ```
 
 ## Actions
-### Validate
-Validate takes one argument: the path to a package configuration. It parses and reports any decode or logical error.
+### validate
+Validate takes one or more argument: the path to a package configuration. It parses and reports any decode or logical error.
 
 # Dependencies
 
@@ -16,6 +16,9 @@ Validate takes one argument: the path to a package configuration. It parses and 
 	- run0
 - GNU coreutils
 - Pacman
+- Devtools
+- devtools-cn-git (Optional)
+- Git
 
 # Environment Variables
 

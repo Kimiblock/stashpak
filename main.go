@@ -3,14 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
-	alpm "github.com/Jguer/go-alpm/v2"
 	"github.com/BurntSushi/toml"
+	alpm "github.com/Jguer/go-alpm/v2"
 )
 
 var (
@@ -62,6 +64,7 @@ type envConf struct {
 
 func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 	var res pkgConf
+	res.Metadata.BuildPrefix = "extra-x86_64-build"
 	file, err := os.Open(path)
 	if err != nil {
 		warn.Fatalln("Could not open package metadata:", err)
@@ -74,16 +77,85 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 		warn.Fatalln("Could not decode package metadata:", err)
 		return res, err
 	}
-	if meta.Undecoded() != nil {
+	if len(meta.Undecoded()) > 0 {
 		warn.Println("Undecoded content:", meta.Undecoded())
 	}
+	for idx, struc := range res.Depends {
+		if len(struc.BuildPrefix) == 0 {
+			res.Depends[idx].BuildPrefix = "extra-x86_64-build"
+		}
+	}
 	return res, nil
+}
+
+func validateConf (path string, warn *log.Logger) []error {
+	errChan := make(chan error, 32)
+	con, err := decodeConf(path, warn)
+	if err != nil {
+		return []error{err}
+	}
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		_, err = exec.LookPath(con.Metadata.BuildPrefix)
+		if err != nil {
+			errChan <- errors.New("Build prefix for main package invalid: " + err.Error())
+		}
+	})
+	wg.Go(func() {
+		if len(con.Metadata.Maintainer) == 0 {
+			errChan <-  errors.New("Maintainer not set")
+		}
+	})
+
+
+	for _, stru := range con.Depends {
+		wg.Go(func() {
+			_, err = exec.LookPath(stru.BuildPrefix)
+			if err != nil {
+				errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
+			}
+			if len(stru.Pkgname) == 0 {
+				errChan <- errors.New("Invalid package name")
+			}
+			switch stru.SourceType {
+				case "git":
+					args := []string{"ls-remote", stru.Source}
+					cmd := exec.Command("git", args...)
+					cmd.Stderr = os.Stderr
+					err := cmd.Run()
+					if err != nil {
+						errChan <- errors.New("Could not get status of " + err.Error())
+					}
+				case "repo":
+					args := []string{"-Si", stru.Source + "/" + stru.Pkgname}
+					cmd := exec.Command("pacman", args...)
+					cmd.Stderr = os.Stderr
+					err := cmd.Run()
+					if err != nil {
+						errChan <- errors.New("Package" + stru.Pkgname + " could not be found")
+					}
+			}
+		})
+
+	}
+
+
+	go func () {
+		wg.Wait()
+		close(errChan)
+	} ()
+	var ret []error
+	for sig := range errChan {
+		ret = append(ret, sig)
+	}
+	return ret
 }
 
 func elevator(debug *log.Logger, warn *log.Logger) {
 	var hasLoop bool
 	for sig := range elevate {
 		if hasLoop == false {
+			debug.Println("Starting elevate loop")
 			hasLoop = true
 			time.Sleep(2 * time.Minute)
 			for {
@@ -224,17 +296,19 @@ func processOpts(logger *log.Logger) {
 func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 	cmdSlice := os.Args[1:]
 	logger.Println()
-	var skipCounter int
 
-	for _, val := range cmdSlice {
-		if skipCounter > 0 {
-			skipCounter--
-			continue
-		}
-		switch val {
-			default:
-				warn.Println("Unknown argument")
-		}
+
+	action := cmdSlice[0]
+	switch action {
+		case "validate":
+			for _, file := range cmdSlice[1:] {
+				logger.Println("Checking configuration:", file)
+				errs := validateConf(file, warn)
+				if len(errs) > 0 {
+					warn.Println("Configuration", file, "failed to pass validation:", errs)
+				}
+			}
+
 	}
 }
 
