@@ -102,12 +102,12 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	var errChan = make(chan error, 32)
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		err := validateConf(path, warn)
+		err := validateConf(filepath.Join(path, "stashpak.toml"), warn)
 		if err != nil {
 			warn.Fatalln("Validation of configuration failed:", err)
 		}
 	})
-	pkg, err := decodeConf(path, warn)
+	pkg, err := decodeConf(filepath.Join(path, "stashpak.toml"), warn)
 	if err != nil {
 		warn.Fatalln("Could not decode configuration:", err)
 	}
@@ -153,7 +153,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 				wg.Go(func() {
 					res := getPkg(debug, warn, dep.Source + "/" + dep.Pkgname)
 					pkgLock.Lock()
-					chrootInstPkgs = append(chrootInstPkgs, res)
+					chrootInstPkgs = append(chrootInstPkgs, res...)
 					pkgLock.Unlock()
 				})
 			default:
@@ -166,18 +166,32 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	if hasFail {
 		warn.Fatalln("Could not build dependency tree: One or more errors occured")
 	}
-
-
-
-
-
-
-
-
 	go func () {
 		wg.Wait()
 		close(errChan)
 	} ()
+
+	var extraPkgCmd []string
+	for _, pkg := range chrootInstPkgs {
+		extraPkgCmd = append(extraPkgCmd, "-I", pkg)
+	}
+
+	var req elevateRequest
+	req.wd = path
+	req.cmdline = []string{
+		pkg.Metadata.BuildPrefix,
+		"--",
+	}
+	if len(extraPkgCmd) > 0 {
+		req.cmdline = append(req.cmdline, extraPkgCmd...)
+	}
+
+	req.err = make(chan error)
+
+	elevate <- req
+
+	err = <- req.err
+
 	var ret []error
 	for sig := range errChan {
 		ret = append(ret, sig)
@@ -252,6 +266,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 	var hasLoop bool
 	for sig := range elevate {
 		if hasLoop == false {
+			go func () {
 			debug.Println("Starting elevate loop")
 			hasLoop = true
 			time.Sleep(2 * time.Minute)
@@ -260,6 +275,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				ctxNew, canc := context.WithTimeout(ctx, 5 * time.Second)
 				cmd := exec.CommandContext(ctxNew, conf.elevateProgram, "true")
 				cmd.Stderr = os.Stderr
+				cmd.Stdout = os.Stdout
 				err := cmd.Run()
 				canc()
 				if err != nil {
@@ -267,6 +283,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 					break
 				}
 			}
+			} ()
 		}
 		go func () {
 			signal := sig
@@ -280,10 +297,12 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				}
 				wd = home
 			}
+			debug.Println("Starting privileged command:", signal.cmdline)
 			if signal.timeout == 0 {
-				cmd := exec.Command(signal.cmdline[0], signal.cmdline[1:]...)
+				cmd := exec.Command("run0", signal.cmdline...)
 				cmd.Dir = wd
 				cmd.Stderr = os.Stderr
+				cmd.Stdout = os.Stdout
 
 				err := cmd.Run()
 				if err != nil {
@@ -295,7 +314,9 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			} else {
 				ctx := context.TODO()
 				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
-				cmd := exec.CommandContext(ctxTimeout, signal.cmdline[0], signal.cmdline[1:]...)
+				cmd := exec.CommandContext(ctxTimeout, "run0", signal.cmdline...)
+				cmd.Stderr = os.Stderr
+				cmd.Stdout = os.Stdout
 				cmd.Dir = wd
 				err := cmd.Run()
 				cancelFunc()
@@ -506,7 +527,9 @@ func pickBuildDir(warn *log.Logger, pkgname string) string {
 }
 
 // Returns the absolute location of a package file
-func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
+func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) []string {
+	var ret []string
+
 	debug.Println("Obtaining package file for", pkgname)
 	cmdline := []string{"pacman", "-Spw", pkgname}
 	ctx := context.TODO()
@@ -517,13 +540,21 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
 	if err != nil {
 		warn.Fatalln("Command", cmdline, "has failed:", err)
 	}
-	res, present := strings.CutPrefix(string(out), "https://")
-	if present {
+	split := strings.SplitSeq(string(out), "\n")
+	var redownload bool
+	for sp := range split {
+		if strings.HasPrefix(sp, "https://") {
+			redownload = true
+			break
+		}
+	}
+	if redownload {
 		var req elevateRequest
 		req.err = make(chan error, 1)
 		req.cmdline = []string{
 			"pacman",
 			"-Sw",
+			"--noconfirm",
 			pkgname,
 		}
 		elevate <- req
@@ -532,13 +563,23 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
 			warn.Fatalln("Could not download package:", err)
 		}
 	}
-	res, present = strings.CutPrefix(string(out), "file://")
-	if present {
-		return res
-	} else {
-		warn.Fatalln("Could not download package:", "pacman returned unknown URI:", res)
-		return res
+	ctx = context.TODO()
+	ctxNew, cancelFunc = context.WithTimeout(ctx, 5 * time.Second)
+	cmd = exec.CommandContext(ctxNew, cmdline[0], cmdline[1:]...)
+	out, err = cmd.Output()
+	cancelFunc()
+	if err != nil {
+		warn.Fatalln("Command", cmdline, "has failed:", err)
 	}
+	split = strings.SplitSeq(string(out), "\n")
+	for sp := range split {
+		if strings.HasPrefix(sp, "file://") {
+			ret = append(ret, strings.TrimPrefix(sp, "file://"))
+		} else {
+			warn.Fatalln("Could not get location for package: unrecognized string:", sp)
+		}
+	}
+	return ret
 }
 
 func lookUpXDG(debug *log.Logger, warn *log.Logger) {
@@ -609,6 +650,17 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 					warn.Println("Configuration", file, "failed to pass validation:", errs)
 				}
 			}
+		case "install-local":
+			wd, err := os.Getwd()
+			if err != nil {
+				warn.Fatalln("Could not get working directory:", err)
+			}
+			errs := buildLocal(wd, logger, warn)
+			if len(errs) > 0 {
+				warn.Fatalln("Could not build package:", errs)
+			}
+		default:
+			warn.Fatalln("Could not execute action", action + ":", "unknown")
 
 	}
 }
