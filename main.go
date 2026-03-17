@@ -99,6 +99,7 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 
 // Should check len(err)
 func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
+	var isGit bool
 	var errChan = make(chan error, 32)
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -117,6 +118,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 		err := cmd.Run()
 		if err != nil {
 			warn.Println("Could not reset path with git:", err)
+			return
 		}
 		cmdline := []string{"clean", "-fdx"}
 		cmd = exec.Command("git", cmdline...)
@@ -124,7 +126,9 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 		err = cmd.Run()
 		if err != nil {
 			warn.Println("Could not clean path with git:", err)
+			return
 		}
+		isGit = true
 	})
 
 	wg.Wait()
@@ -211,6 +215,35 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	for sig := range errChan {
 		ret = append(ret, sig)
 	}
+
+	if isGit {
+		instList := []string{}
+		ent, err := os.ReadDir(path)
+		if err != nil {
+			warn.Println("Could not read directory:", err)
+			errChan <- errors.New("Could not read directory: " + err.Error())
+		} else {
+			for _, info := range ent {
+				if strings.Contains(info.Name(), ".pkg") && info.IsDir() == false {
+					instList = append(instList, filepath.Join(path, info.Name()))
+				}
+			}
+		}
+		if len(instList) > 0 {
+			var req elevateRequest
+			req.cmdline = []string{"pacman", "-U", "--noconfirm"}
+			req.cmdline = append(req.cmdline, instList...)
+			req.err = make(chan error)
+			elevate <- req
+
+			err := <- req.err
+			if err != nil {
+				warn.Println("Could not install package:", err)
+			}
+		}
+	}
+
+
 	return ret
 }
 
