@@ -345,7 +345,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			}
 			debug.Println("Starting privileged command:", signal.cmdline)
 			if signal.timeout == 0 {
-				cmd := exec.Command("run0", signal.cmdline...)
+				cmd := exec.Command(conf.elevateProgram, signal.cmdline...)
 				cmd.Dir = wd
 				cmd.Stderr = os.Stderr
 				cmd.Stdout = os.Stdout
@@ -360,7 +360,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			} else {
 				ctx := context.TODO()
 				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
-				cmd := exec.CommandContext(ctxTimeout, "run0", signal.cmdline...)
+				cmd := exec.CommandContext(ctxTimeout, conf.elevateProgram, signal.cmdline...)
 				cmd.Stderr = os.Stderr
 				cmd.Stdout = os.Stdout
 				cmd.Dir = wd
@@ -682,6 +682,8 @@ func processOpts(logger *log.Logger) {
 			logger.Println("Could not resolve elevate binary path:", err)
 		}
 
+	} else {
+		conf.elevateProgram = "run0"
 	}
 }
 
