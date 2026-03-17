@@ -33,6 +33,7 @@ const (
 type elevateRequest struct {
 	cmdline		[]string
 	timeout		time.Duration
+	wd		string
 	err		chan error
 }
 
@@ -94,6 +95,91 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 		}
 	}
 	return res, nil
+}
+
+// Should check len(err)
+func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
+	var errChan = make(chan error, 32)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		err := validateConf(path, warn)
+		if err != nil {
+			warn.Fatalln("Validation of configuration failed:", err)
+		}
+	})
+	pkg, err := decodeConf(path, warn)
+	if err != nil {
+		warn.Fatalln("Could not decode configuration:", err)
+	}
+
+	wg.Wait()
+	var chrootInstPkgs []string
+	var pkgLock	sync.Mutex
+	var hasFail bool
+	var failLock	sync.Mutex
+	for _, dep := range pkg.Depends {
+		switch dep.SourceType {
+			case "git":
+				wg.Go(func() {
+					path, errs := buildPkg(debug, warn, dep.Pkgname, dep.Source, dep.BuildPrefix)
+					if len(errs) > 0 {
+						failLock.Lock()
+						hasFail = true
+						failLock.Unlock()
+						warn.Println("Dependency", dep.Pkgname, "failed to build")
+					} else {
+						entries, err := os.ReadDir(path)
+						if err != nil {
+							failLock.Lock()
+							hasFail = true
+							failLock.Unlock()
+							warn.Println("Could not parse build directory:", err)
+						} else {
+							for _, ent := range entries {
+								if ent.IsDir() {
+									continue
+								} else if ent.Type().IsRegular() {
+									if strings.Contains(ent.Name(), ".pkg") {
+										pkgLock.Lock()
+										chrootInstPkgs = append(chrootInstPkgs, filepath.Join(path, ent.Name()))
+										pkgLock.Unlock()
+									}
+								}
+							}
+						}
+					}
+				})
+			case "repo":
+				wg.Go(func() {
+
+				})
+			default:
+				warn.Fatalln("Could not build package: unrecognized source type")
+		}
+	}
+
+	wg.Wait()
+
+	if hasFail {
+		warn.Fatalln("Could not build dependency tree: One or more errors occured")
+	}
+
+
+
+
+
+
+
+
+	go func () {
+		wg.Wait()
+		close(errChan)
+	} ()
+	var ret []error
+	for sig := range errChan {
+		ret = append(ret, sig)
+	}
+	return ret
 }
 
 func validateConf (path string, warn *log.Logger) []error {
@@ -181,9 +267,21 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 		}
 		go func () {
 			signal := sig
+			var wd string
+			if len(signal.wd) > 0 {
+				wd = signal.wd
+			} else {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					warn.Fatalln("Could not get user home:", err)
+				}
+				wd = home
+			}
 			if signal.timeout == 0 {
 				cmd := exec.Command(signal.cmdline[0], signal.cmdline[1:]...)
+				cmd.Dir = wd
 				cmd.Stderr = os.Stderr
+
 				err := cmd.Run()
 				if err != nil {
 					warn.Println("Elevated command has failed:", err)
@@ -195,6 +293,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				ctx := context.TODO()
 				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
 				cmd := exec.CommandContext(ctxTimeout, signal.cmdline[0], signal.cmdline[1:]...)
+				cmd.Dir = wd
 				err := cmd.Run()
 				cancelFunc()
 				if err != nil {
@@ -233,8 +332,9 @@ func getRemoteGit(path string, url string) error {
 	return nil
 }
 
-// Builds a package from git repository using chroot
-func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, prefix string) {
+// Builds a package from git repository using chroot, returns the path to build directory and optionally a slice of errors
+func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, prefix string) (string, []error) {
+	errChan := make(chan error, 16)
 	cmdline := []string{
 		"remote",
 		"get-url",
@@ -251,13 +351,15 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 		debug.Println("Could not get origin URL of repository:", err)
 		err = getRemoteGit(buildPath, url)
 		if err != nil {
-			warn.Fatalln(err)
+			errChan <- err
+			warn.Println(err)
 		}
 	} else if string(out) != url {
 		warn.Println("Repository mismatch, downloading from source")
 		err := getRemoteGit(buildPath, url)
 		if err != nil {
-			warn.Fatalln(err)
+			warn.Println(err)
+			errChan <- err
 		}
 	}
 
@@ -272,7 +374,8 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 	}
 	err = cmd.Run()
 	if err != nil {
-		warn.Fatalln("Could not update repository:", err)
+		warn.Println("Could not update repository:", err)
+		errChan <- err
 	}
 
 	debug.Println("Finished repository download")
@@ -289,7 +392,8 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 	if os.IsNotExist(err) == false && err != nil {
 		err := os.RemoveAll(buildDir)
 		if err != nil {
-			warn.Fatalln("Could not remove previous build directory:", err)
+			warn.Println("Could not remove previous build directory:", err)
+			errChan <- err
 		}
 	}
 	debug.Println("Creating a working copy of repository...")
@@ -303,17 +407,31 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
-		warn.Fatalln("Could not create working copy:", err)
+		warn.Println("Could not create working copy:", err)
+		errChan <- err
 	}
 
 	var elereq elevateRequest
+	elereq.wd = buildDir
 	elereq.cmdline = []string{prefix}
 	elereq.err = make(chan error, 1)
 	elevate <- elereq
 	err = <- elereq.err
 	if err != nil {
-		warn.Fatalln("Could not build package", pkgname, ":", err)
+		warn.Println("Could not build package", pkgname, ":", err)
+		errChan <- err
 	}
+
+	go func () {
+		close(errChan)
+	} ()
+
+	var ret []error
+
+	for errSig := range errChan {
+		ret = append(ret, errSig)
+	}
+	return buildDir, ret
 
 }
 
