@@ -111,6 +111,21 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	if err != nil {
 		warn.Fatalln("Could not decode configuration:", err)
 	}
+	wg.Go(func() {
+		cmd := exec.Command("git", "reset")
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			warn.Println("Could not reset path with git:", err)
+		}
+		cmdline := []string{"clean", "-fdx"}
+		cmd = exec.Command("git", cmdline...)
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			warn.Println("Could not clean path with git:", err)
+		}
+	})
 
 	wg.Wait()
 	var chrootInstPkgs []string
