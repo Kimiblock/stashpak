@@ -379,7 +379,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 
 func getRemoteGit(path string, url string) error {
 	err := os.RemoveAll(path)
-	if os.IsNotExist(err) {} else {
+	if os.IsNotExist(err) {} else if err != nil {
 		return errors.New("Could not remove previous repository: " + err.Error())
 	}
 	cmdline := []string{
