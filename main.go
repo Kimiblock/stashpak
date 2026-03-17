@@ -25,6 +25,10 @@ var (
 	elevate		= make(chan elevateRequest, 2)
 )
 
+const (
+	repoUrl		string = "https://github.com/Kraftland/portable-arch.git"
+)
+
 // Client must initialize success / error channel!
 type elevateRequest struct {
 	cmdline		[]string
@@ -257,6 +261,20 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 		}
 	}
 
+
+	cmdline = []string{
+		"pull",
+	}
+	cmd = exec.Command("git", cmdline...)
+	cmd.Dir = buildPath
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig:		syscall.SIGTERM,
+	}
+	err = cmd.Run()
+	if err != nil {
+		warn.Fatalln("Could not update repository:", err)
+	}
+
 	debug.Println("Finished repository download")
 
 	pathPfx := filepath.Join(
@@ -268,7 +286,7 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 
 	buildDir := filepath.Join(pathPfx, strconv.Itoa(rand.Int()))
 	_, err = os.Stat(buildDir)
-	if os.IsNotExist(err) == false {
+	if os.IsNotExist(err) == false && err != nil {
 		err := os.RemoveAll(buildDir)
 		if err != nil {
 			warn.Fatalln("Could not remove previous build directory:", err)
@@ -295,6 +313,57 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 	err = <- elereq.err
 	if err != nil {
 		warn.Fatalln("Could not build package", pkgname, ":", err)
+	}
+
+}
+
+func updateRepo(debug *log.Logger, warn *log.Logger) {
+	path := filepath.Join(
+		xdgDir.cacheDir,
+		"stashpak",
+		"repo",
+	)
+	wd := filepath.Join(
+		xdgDir.cacheDir,
+		"stashpak",
+	)
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(wd, 0700)
+		if err != nil {
+			warn.Fatalln("Could not create cache directory:", err)
+		}
+		cmdl := []string{
+			"clone",
+			repoUrl,
+			"repo",
+			"--depth=1",
+		}
+		cmd := exec.Command("git", cmdl...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Dir = wd
+		err = cmd.Run()
+		if err != nil {
+			warn.Fatalln("Could not clone repository:", err)
+		}
+	} else if err != nil {
+		warn.Fatalln("Could not stat repo:", err)
+	}
+
+
+	cmdline := []string{
+		"pull",
+	}
+
+	cmd := exec.Command("git", cmdline...)
+	cmd.Dir = path
+	debug.Println("Updating local copy of repository...")
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	err = cmd.Run()
+	if err != nil {
+		warn.Fatalln("Could not update local copy of repository:", err)
 	}
 
 }
@@ -440,5 +509,6 @@ func main () {
 		panic("Could not initialize alpm: " + err.Error())
 	}
 	debug.Println("Initialized ALPM handler for database:", db.Name())
+	updateRepo(debug, warn)
 	cmdlineDispatcher(debug, warn)
 }
