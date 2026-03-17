@@ -24,7 +24,6 @@ A configuration file named `stashpak.toml` must exist.
 - Devtools
 - devtools-cn-git (Optional)
 - Git
-- Bubblewrap
 
 # Environment Variables
 
