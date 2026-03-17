@@ -575,6 +575,10 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) []string {
 	for sp := range split {
 		if strings.HasPrefix(sp, "file://") {
 			ret = append(ret, strings.TrimPrefix(sp, "file://"))
+		} else if len(strings.TrimSpace(sp)) == 0 {
+			continue
+		} else if strings.TrimSpace(sp) == "\n" {
+			continue
 		} else {
 			warn.Fatalln("Could not get location for package: unrecognized string:", sp)
 		}
