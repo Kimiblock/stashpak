@@ -19,6 +19,7 @@ Validate takes one or more argument: the path to a package configuration. It par
 - Devtools
 - devtools-cn-git (Optional)
 - Git
+- Bubblewrap
 
 # Environment Variables
 
