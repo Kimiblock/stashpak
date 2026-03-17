@@ -14,6 +14,9 @@ Takes no argument and works in the current directory to build and install a Port
 
 A configuration file named `stashpak.toml` must exist.
 
+### get
+Takes one or more packages to install from the Portable Arch repo.
+
 
 # Dependencies
 

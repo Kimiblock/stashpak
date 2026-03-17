@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -224,7 +225,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 			errChan <- errors.New("Could not read directory: " + err.Error())
 		} else {
 			for _, info := range ent {
-				if strings.Contains(info.Name(), ".pkg") && info.IsDir() == false {
+				if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
 					instList = append(instList, filepath.Join(path, info.Name()))
 				}
 			}
@@ -687,6 +688,46 @@ func processOpts(logger *log.Logger) {
 	}
 }
 
+// Attempts to build one or more Portable packages
+func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
+	var wg sync.WaitGroup
+	var errChan = make(chan error, 2)
+
+
+	var arch string
+
+	// From `go tool dist list`
+	switch runtime.GOARCH {
+		case "amd64":
+			arch = "x86_64"
+		default:
+			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
+	}
+	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
+
+	for _, pkg := range pkgs {
+		errs := buildLocal(filepath.Join(baseDir, pkg), debug, warn)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				errChan <- err
+			}
+		}
+	}
+
+	go func () {
+		wg.Wait()
+		close(errChan)
+	} ()
+
+	for sig := range errChan {
+		if sig != nil {
+			return errors.New("One or more packages have failed building")
+		}
+	}
+	return nil
+
+}
+
 func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 	cmdSlice := os.Args[1:]
 	logger.Println()
@@ -711,6 +752,14 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			if len(errs) > 0 {
 				warn.Fatalln("Could not build package:", errs)
 			}
+		case "get":
+				if len(cmdSlice) < 2 {
+					warn.Fatalln("Action get requires one or more arguments")
+				}
+				err := getPkgs(logger, warn, cmdSlice[1:])
+				if err != nil {
+					warn.Fatalln(err)
+				}
 		default:
 			warn.Fatalln("Could not execute action", action + ":", "unknown")
 
