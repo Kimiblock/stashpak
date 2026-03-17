@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -99,6 +100,7 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 
 // Should check len(err)
 func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
+	var isGit bool
 	var errChan = make(chan error, 32)
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -111,7 +113,24 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	if err != nil {
 		warn.Fatalln("Could not decode configuration:", err)
 	}
-
+	wg.Go(func() {
+		cmd := exec.Command("git", "reset")
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			warn.Println("Could not reset path with git:", err)
+			return
+		}
+		cmdline := []string{"clean", "-fdx"}
+		cmd = exec.Command("git", cmdline...)
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			warn.Println("Could not clean path with git:", err)
+			return
+		}
+		isGit = true
+	})
 	wg.Wait()
 	var chrootInstPkgs []string
 	var pkgLock	sync.Mutex
@@ -195,6 +214,33 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	var ret []error
 	for sig := range errChan {
 		ret = append(ret, sig)
+	}
+
+	if isGit {
+		instList := []string{}
+		ent, err := os.ReadDir(path)
+		if err != nil {
+			warn.Println("Could not read directory:", err)
+			errChan <- errors.New("Could not read directory: " + err.Error())
+		} else {
+			for _, info := range ent {
+				if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
+					instList = append(instList, filepath.Join(path, info.Name()))
+				}
+			}
+		}
+		if len(instList) > 0 {
+			var req elevateRequest
+			req.cmdline = []string{"pacman", "-U", "--noconfirm"}
+			req.cmdline = append(req.cmdline, instList...)
+			req.err = make(chan error)
+			elevate <- req
+
+			err := <- req.err
+			if err != nil {
+				warn.Println("Could not install package:", err)
+			}
+		}
 	}
 	return ret
 }
@@ -639,6 +685,45 @@ func processOpts(logger *log.Logger) {
 	}
 }
 
+// Attempts to build one or more Portable packages
+func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
+	var wg sync.WaitGroup
+	var errChan = make(chan error, 2)
+
+
+	var arch string
+
+	// From `go tool dist list`
+	switch runtime.GOARCH {
+		case "amd64":
+			arch = "x86_64"
+		default:
+			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
+	}
+	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
+
+	for _, pkg := range pkgs {
+		errs := buildLocal(filepath.Join(baseDir, pkg), debug, warn)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				errChan <- err
+			}
+		}
+	}
+
+	go func () {
+		wg.Wait()
+		close(errChan)
+	} ()
+
+	for sig := range errChan {
+		if sig != nil {
+			return errors.New("One or more packages have failed building")
+		}
+	}
+	return nil
+
+}
 func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 	cmdSlice := os.Args[1:]
 	logger.Println()
@@ -663,6 +748,14 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			if len(errs) > 0 {
 				warn.Fatalln("Could not build package:", errs)
 			}
+		case "get":
+				if len(cmdSlice) < 2 {
+					warn.Fatalln("Action get requires one or more arguments")
+				}
+				err := getPkgs(logger, warn, cmdSlice[1:])
+				if err != nil {
+					warn.Fatalln(err)
+				}
 		default:
 			warn.Fatalln("Could not execute action", action + ":", "unknown")
 
