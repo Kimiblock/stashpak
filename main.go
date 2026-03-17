@@ -151,7 +151,10 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 				})
 			case "repo":
 				wg.Go(func() {
-
+					res := getPkg(debug, warn, dep.Source + "/" + dep.Pkgname)
+					pkgLock.Lock()
+					chrootInstPkgs = append(chrootInstPkgs, res)
+					pkgLock.Unlock()
 				})
 			default:
 				warn.Fatalln("Could not build package: unrecognized source type")
