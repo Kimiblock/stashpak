@@ -5,10 +5,14 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -200,6 +204,117 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 	}
 }
 
+func getRemoteGit(path string, url string) error {
+	err := os.RemoveAll(path)
+	if os.IsNotExist(err) {} else {
+		return errors.New("Could not remove previous repository: " + err.Error())
+	}
+	cmdline := []string{
+		"clone",
+		url,
+		path,
+	}
+
+	cmd := exec.Command("git", cmdline...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig:	syscall.SIGTERM,
+	}
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+	err = cmd.Run()
+	if err != nil {
+		return errors.New("Could not download repository: " + err.Error())
+	}
+	return nil
+}
+
+// Builds a package from git repository using chroot
+func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, prefix string) {
+	cmdline := []string{
+		"remote",
+		"get-url",
+		"origin",
+	}
+	buildPath := pickBuildDir(warn, pkgname)
+	cmd := exec.Command("git", cmdline...)
+	cmd.Dir = buildPath
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig:		syscall.SIGTERM,
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		debug.Println("Could not get origin URL of repository:", err)
+		err = getRemoteGit(buildPath, url)
+		if err != nil {
+			warn.Fatalln(err)
+		}
+	} else if string(out) != url {
+		warn.Println("Repository mismatch, downloading from source")
+		err := getRemoteGit(buildPath, url)
+		if err != nil {
+			warn.Fatalln(err)
+		}
+	}
+
+	debug.Println("Finished repository download")
+
+	pathPfx := filepath.Join(
+		xdgDir.cacheDir,
+		"stashpak",
+		"build",
+	)
+
+
+	buildDir := filepath.Join(pathPfx, strconv.Itoa(rand.Int()))
+	_, err = os.Stat(buildDir)
+	if os.IsNotExist(err) == false {
+		err := os.RemoveAll(buildDir)
+		if err != nil {
+			warn.Fatalln("Could not remove previous build directory:", err)
+		}
+	}
+	debug.Println("Creating a working copy of repository...")
+	cloneCmd := []string{
+		"clone",
+		buildPath,
+		buildDir,
+	}
+
+	cmd = exec.Command("git", cloneCmd...)
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		warn.Fatalln("Could not create working copy:", err)
+	}
+
+	var elereq elevateRequest
+	elereq.cmdline = []string{prefix}
+	elereq.err = make(chan error, 1)
+	elevate <- elereq
+	err = <- elereq.err
+	if err != nil {
+		warn.Fatalln("Could not build package", pkgname, ":", err)
+	}
+
+}
+
+func pickBuildDir(warn *log.Logger, pkgname string) string {
+	stat, err := os.Stat(xdgDir.cacheDir)
+	if err != nil {
+		warn.Fatalln("Could not stat XDG Cache Directory:", err)
+	}
+	if stat.IsDir() == false {
+		warn.Fatalln("XDG Cache Directory invalid: not a directory")
+	}
+	path := filepath.Join(xdgDir.cacheDir, "stashpak", "git", pkgname)
+	err = os.MkdirAll(path, 0700)
+	if err != nil {
+		warn.Fatalln("Could not create build path:", err)
+	}
+	return path
+}
+
 // Returns the absolute location of a package file
 func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
 	debug.Println("Obtaining package file for", pkgname)
@@ -234,10 +349,6 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) string {
 		warn.Fatalln("Could not download package:", "pacman returned unknown URI:", res)
 		return res
 	}
-
-
-
-
 }
 
 func lookUpXDG(debug *log.Logger, warn *log.Logger) {
