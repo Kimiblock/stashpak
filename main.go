@@ -98,7 +98,7 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 	return res, nil
 }
 
-// Should check len(err)
+// Should check len(err), actually builds "master" package and will build dependencies
 func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	var isGit bool
 	var errChan = make(chan error, 32)
@@ -158,7 +158,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 								if ent.IsDir() {
 									continue
 								} else if ent.Type().IsRegular() {
-									if strings.Contains(ent.Name(), ".pkg") {
+									if strings.Contains(ent.Name(), ".pkg") && ! strings.HasSuffix(ent.Name(), ".log") {
 										pkgLock.Lock()
 										chrootInstPkgs = append(chrootInstPkgs, filepath.Join(path, ent.Name()))
 										pkgLock.Unlock()
