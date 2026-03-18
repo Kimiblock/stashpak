@@ -309,7 +309,7 @@ func validateConf (path string, warn *log.Logger) []error {
 }
 
 func elevator(debug *log.Logger, warn *log.Logger) {
-	var hasLoop bool
+	var hasLoop bool = true
 	for sig := range elevate {
 		if hasLoop == false {
 			go func () {
