@@ -116,6 +116,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	wg.Go(func() {
 		cmd := exec.Command("git", "reset")
 		cmd.Stderr = os.Stderr
+		cmd.Dir = path
 		err := cmd.Run()
 		if err != nil {
 			warn.Println("Could not reset path with git:", err)
@@ -123,6 +124,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 		}
 		cmdline := []string{"clean", "-fdx"}
 		cmd = exec.Command("git", cmdline...)
+		cmd.Dir = path
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
@@ -343,7 +345,10 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				}
 				wd = home
 			}
+
 			debug.Println("Starting privileged command:", signal.cmdline)
+			debug.Println("Using working directory:", wd)
+
 			if signal.timeout == 0 {
 				cmd := exec.Command(conf.elevateProgram, signal.cmdline...)
 				cmd.Dir = wd
