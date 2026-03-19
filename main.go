@@ -66,6 +66,7 @@ type DependsSection struct {
 	Source		string
 	// The build prefix for type git. Defaults to "extra-x86_64-build".
 	BuildPrefix	string
+	Install		bool
 }
 
 type envConf struct {
@@ -138,6 +139,8 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	var pkgLock	sync.Mutex
 	var hasFail bool
 	var failLock	sync.Mutex
+	var hostInstPkgs []string
+	var hostPkgLock sync.Mutex
 	for _, dep := range pkg.Depends {
 		switch dep.SourceType {
 			case "git":
@@ -164,6 +167,11 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 										pkgLock.Lock()
 										chrootInstPkgs = append(chrootInstPkgs, filepath.Join(path, ent.Name()))
 										pkgLock.Unlock()
+										if dep.Install {
+											hostPkgLock.Lock()
+											hostInstPkgs = append(hostInstPkgs, filepath.Join(path, ent.Name()))
+											hostPkgLock.Unlock()
+										}
 									}
 								}
 							}
@@ -232,6 +240,17 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 			}
 		}
 		if len(instList) > 0 {
+			if len(hostInstPkgs) > 0 {
+				var req elevateRequest
+				req.cmdline = []string{"pacman", "-U", "--asdeps"}
+				req.cmdline = append(req.cmdline, hostInstPkgs...)
+				req.err = make(chan error)
+				elevate <- req
+				err := <- req.err
+				if err != nil {
+					warn.Fatalln("Could not install one or more dependencies:", err)
+				}
+			}
 			var req elevateRequest
 			req.cmdline = []string{"pacman", "-U", "--noconfirm"}
 			req.cmdline = append(req.cmdline, instList...)

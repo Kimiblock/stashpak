@@ -23,3 +23,6 @@ source		= "archlinuxcn"
 pkgname		= "linuxqq"
 sourceType	= "aur"
 source		= "https://aur.archlinux.org/linuxqq.git"
+
+# Install the package on the host as dependency
+install		= false
