@@ -57,6 +57,8 @@ type confMeta struct {
 	BuildPrefix	string
 	// GitHub user name of Maintainer
 	Maintainer	string
+	Type		string
+	Repo		string
 }
 
 type DependsSection struct {
@@ -75,6 +77,7 @@ type envConf struct {
 
 func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 	var res pkgConf
+	res.Metadata.Type = "build"
 	res.Metadata.BuildPrefix = "extra-x86_64-build"
 	file, err := os.Open(path)
 	if err != nil {
@@ -101,8 +104,6 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 
 // Should check len(err), actually builds "master" package and will build dependencies
 func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
-	var isGit bool
-	var errChan = make(chan error, 32)
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		err := validateConf(filepath.Join(path, "stashpak.toml"), warn)
@@ -111,6 +112,21 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 		}
 	})
 	pkg, err := decodeConf(filepath.Join(path, "stashpak.toml"), warn)
+	if pkg.Metadata.Type == "repo" {
+		errChan := make(chan error, 1)
+		req := elevateRequest{
+			cmdline:	[]string{"pacman", "-S", "--noconfirm", pkg.Metadata.Repo},
+			err:		errChan,
+		}
+		elevate <- req
+		err := <- errChan
+		if err != nil {
+			warn.Fatalln("Could not install package from repo:", err)
+		}
+		return []error{}
+	}
+	var isGit bool
+	var errChan = make(chan error, 32)
 	if err != nil {
 		warn.Fatalln("Could not decode configuration:", err)
 	}

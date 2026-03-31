@@ -3,6 +3,11 @@
 # The command to build a package. Should be "extra-x86_64-build" or "archlinuxcn-x86_64-build"
 #buildPrefix	= "extra-x86_64-build"
 
+# The package type. Can be repo or build. Defines whether this package is pre-built or not. Defaults to "build"
+type = "build"
+# A full repo/pkgname name to download package from if metaadata.type is repo.
+#repo = ""
+
 # Your GitHub user name
 maintainer	= "exampleUser"
 
@@ -11,7 +16,7 @@ maintainer	= "exampleUser"
 #buildPrefix	= "extra-x86_64-build"
 
 # The package name of a dependency
-pkgname		= "portable"
+pkgname		= "portable-packer"
 
 # Source can be either a string of git URL (type git), or repo name (type repo) to download from locally defined repositories.
 sourceType	= "repo"
