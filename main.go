@@ -643,11 +643,13 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) []string {
 			"--noconfirm",
 			pkgname,
 		}
+		pacmanLock.Lock()
 		elevate <- req
 		err := <- req.err
 		if err != nil {
 			warn.Fatalln("Could not download package:", err)
 		}
+		pacmanLock.Unlock()
 	}
 	ctx = context.TODO()
 	ctxNew, cancelFunc = context.WithTimeout(ctx, 5 * time.Second)
