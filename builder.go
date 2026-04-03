@@ -11,8 +11,10 @@ import (
 	"syscall"
 )
 
+
+
 // Prepare a Git repository for dependency building, returns the build directory
-func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string, prefix string) (string) {
+func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string) (string) {
 	errChan := make(chan error, 16)
 	go func () {
 		for sig := range errChan {
@@ -51,6 +53,21 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 		}
 	}
 	cmdline = []string{
+		"clean",
+		"-fdx",
+	}
+	cmd = exec.Command("git", cmdline...)
+	cmd.Dir = path
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig:		syscall.SIGTERM,
+	}
+	err = cmd.Run()
+	if err != nil {
+		warn.Println("Could not clean repository:", err)
+		errChan <- err
+	}
+
+	cmdline = []string{
 		"pull",
 	}
 	cmd = exec.Command("git", cmdline...)
@@ -65,7 +82,10 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 	}
 	close(errChan)
 	return path
+}
 
+// Builds a package in a git repository, returns a slice of package files. This function does not resolve dependencies.
+func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) {
 
 }
 
