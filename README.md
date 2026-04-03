@@ -26,12 +26,12 @@ Takes one or more packages to install from the Portable Arch repo.
 - Devtools
 - devtools-cn-git (Optional)
 - Git
-<<<<<<< HEAD
-- Bubblewrap
-=======
->>>>>>> next
 
 # Environment Variables
 
 - stashPakElevateProgram
 	- Controls which program is used to elevate permissions. Defaults to run0.
+
+# Requirements
+
+StashPak requires all package sources to be a git repository, and may reset such repository when starting up. Please commit your changes to prevent losing work.
