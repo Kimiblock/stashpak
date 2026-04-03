@@ -53,6 +53,19 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 		}
 	}
 	cmdline = []string{
+		"reset",
+	}
+	cmd = exec.Command("git", cmdline...)
+	cmd.Dir = path
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig:		syscall.SIGTERM,
+	}
+	err = cmd.Run()
+	if err != nil {
+		warn.Println("Could not reset repository:", err)
+		errChan <- err
+	}
+	cmdline = []string{
 		"clean",
 		"-fdx",
 	}
