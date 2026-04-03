@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
-
-
 
 // Prepare a Git repository for dependency building, returns the build directory
 func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string) (string) {
@@ -98,8 +97,42 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 }
 
 // Builds a package in a git repository, returns a slice of package files. This function does not resolve dependencies.
-func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) {
+func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) []string {
+	debug.Println("Building package", pkgname, "with dependency list:", depPaths)
 
+	var elereq elevateRequest
+	elereq.wd = path
+	elereq.cmdline = []string{prefix, "--"}
+	for _, dep := range depPaths {
+		elereq.cmdline = append(elereq.cmdline, "-I", dep)
+	}
+	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar")
+	elereq.err = make(chan error, 1)
+	elevate <- elereq
+	err := <- elereq.err
+	if err != nil {
+		warn.Fatalln("Could not build package", pkgname, ":", err)
+	}
+	ent, err := os.ReadDir(path)
+	var listChan = make(chan string, 10)
+	var list []string
+	go func () {
+		for pkg := range listChan {
+			list = append(list, pkg)
+		}
+	} ()
+	var wg sync.WaitGroup
+	for _, info := range ent {
+		wg.Go(func() {
+			if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
+				listChan <- filepath.Join(path, info.Name())
+			}
+		})
+	}
+	wg.Wait()
+	close(listChan)
+	debug.Println("Built package", pkgname)
+	return list
 }
 
 // Builds a package from git repository using chroot, returns the path to build directory and optionally a slice of errors
