@@ -224,6 +224,7 @@ func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
 	var req elevateRequest
 	req.wd = path
 	req.cmdline = []string{
+		"env", "PKGEXT=.pkg.tar",
 		pkg.Metadata.BuildPrefix,
 		"--",
 	}
@@ -523,7 +524,7 @@ func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, p
 
 	var elereq elevateRequest
 	elereq.wd = buildDir
-	elereq.cmdline = []string{prefix}
+	elereq.cmdline = []string{"env", "PKGEXT=.pkg.tar", prefix}
 	elereq.err = make(chan error, 1)
 	elevate <- elereq
 	err = <- elereq.err
