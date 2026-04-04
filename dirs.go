@@ -62,7 +62,7 @@ func instPkgs(path string, debug *log.Logger, warn *log.Logger) {
 // Installs packages from a slice
 func instSlice(pkgs []string, debug *log.Logger, warn *log.Logger) {
 	var elereq elevateRequest
-	elereq.cmdline = []string{"pacman", "-U"}
+	elereq.cmdline = []string{"pacman", "--noconfirm", "-U"}
 	elereq.cmdline = append(elereq.cmdline, pkgs...)
 	elereq.err = make(chan error, 1)
 	elevate <- elereq
