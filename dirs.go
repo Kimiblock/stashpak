@@ -52,3 +52,22 @@ func listPkgs(path string, debug *log.Logger, warn *log.Logger) []string {
 	close(listChan)
 	return list
 }
+
+// Installs package from a directory
+func instPkgs(path string, debug *log.Logger, warn *log.Logger) {
+	pkgs := listPkgs(path, debug, warn)
+	instSlice(pkgs, debug, warn)
+}
+
+// Installs packages from a slice
+func instSlice(pkgs []string, debug *log.Logger, warn *log.Logger) {
+	var elereq elevateRequest
+	elereq.cmdline = []string{"pacman", "-U"}
+	elereq.cmdline = append(elereq.cmdline, pkgs...)
+	elereq.err = make(chan error, 1)
+	elevate <- elereq
+	err := <- elereq.err
+	if err != nil {
+		warn.Fatalln("Could not install packages:", err)
+	}
+}
