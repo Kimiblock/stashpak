@@ -2,11 +2,9 @@ package main
 
 import (
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -23,7 +21,6 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 		}
 	} ()
 	var path string = filepath.Join(xdgDir.cacheDir, "stashpak/git", pkgname)
-
 	debug.Println("Preparing a build directory...")
 	cmdline := []string{
 		"remote",
@@ -51,34 +48,7 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 			errChan <- err
 		}
 	}
-	cmdline = []string{
-		"reset",
-	}
-	cmd = exec.Command("git", cmdline...)
-	cmd.Dir = path
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not reset repository:", err)
-		errChan <- err
-	}
-	cmdline = []string{
-		"clean",
-		"-fdx",
-	}
-	cmd = exec.Command("git", cmdline...)
-	cmd.Dir = path
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not clean repository:", err)
-		errChan <- err
-	}
-
+	cleanDir(path, debug, warn)
 	cmdline = []string{
 		"pull",
 	}
@@ -97,14 +67,15 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 }
 
 // Builds a package in a git repository, returns a slice of package files. This function does not resolve dependencies.
-func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) []string {
-	debug.Println("Building package", pkgname, "with dependency list:", depPaths)
-
+// Warning: prefix should be set!
+// pkgname can be empty or base or actual name
+func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, deps []pkginfo) []string {
+	debug.Println("Building package", pkgname, "with dependency list:", deps)
 	var elereq elevateRequest
 	elereq.wd = path
 	elereq.cmdline = []string{prefix, "--"}
-	for _, dep := range depPaths {
-		elereq.cmdline = append(elereq.cmdline, "-I", dep)
+	for _, dep := range deps {
+		elereq.cmdline = append(elereq.cmdline, "-I", dep.pkgname)
 	}
 	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar")
 	elereq.err = make(chan error, 1)
@@ -133,107 +104,4 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	close(listChan)
 	debug.Println("Built package", pkgname)
 	return list
-}
-
-// Builds a package from git repository using chroot, returns the path to build directory and optionally a slice of errors
-func buildPkg(debug *log.Logger, warn *log.Logger, pkgname string, url string, prefix string) (string, []error) {
-	errChan := make(chan error, 16)
-	cmdline := []string{
-		"remote",
-		"get-url",
-		"origin",
-	}
-	buildPath := pickBuildDir(warn, pkgname)
-	cmd := exec.Command("git", cmdline...)
-	cmd.Dir = buildPath
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		debug.Println("Could not get origin URL of repository:", err)
-		err = getRemoteGit(buildPath, url)
-		if err != nil {
-			errChan <- err
-			warn.Println(err)
-		}
-	} else if strings.TrimSpace(string(out)) != url {
-		warn.Println("Repository mismatch, downloading from source")
-		err := getRemoteGit(buildPath, url)
-		if err != nil {
-			warn.Println(err)
-			errChan <- err
-		}
-	}
-
-
-	cmdline = []string{
-		"pull",
-	}
-	cmd = exec.Command("git", cmdline...)
-	cmd.Dir = buildPath
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not update repository:", err)
-		errChan <- err
-	}
-
-	debug.Println("Finished repository download")
-
-	pathPfx := filepath.Join(
-		xdgDir.cacheDir,
-		"stashpak",
-		"build",
-	)
-
-
-	buildDir := filepath.Join(pathPfx, strconv.Itoa(rand.Int()))
-	_, err = os.Stat(buildDir)
-	if os.IsNotExist(err) == false && err != nil {
-		err := os.RemoveAll(buildDir)
-		if err != nil {
-			warn.Println("Could not remove previous build directory:", err)
-			errChan <- err
-		}
-	}
-	debug.Println("Creating a working copy of repository...")
-	cloneCmd := []string{
-		"clone",
-		buildPath,
-		buildDir,
-	}
-
-	cmd = exec.Command("git", cloneCmd...)
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not create working copy:", err)
-		errChan <- err
-	}
-
-	var elereq elevateRequest
-	elereq.wd = buildDir
-	elereq.cmdline = []string{prefix, "--", "--", "PKGEXT=.pkg.tar"}
-	elereq.err = make(chan error, 1)
-	elevate <- elereq
-	err = <- elereq.err
-	if err != nil {
-		warn.Println("Could not build package", pkgname, ":", err)
-		errChan <- err
-	}
-
-	go func () {
-		close(errChan)
-	} ()
-
-	var ret []error
-
-	for errSig := range errChan {
-		ret = append(ret, errSig)
-	}
-	return buildDir, ret
-
 }

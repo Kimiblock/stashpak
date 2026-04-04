@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -43,187 +42,6 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 		}
 	}
 	return res, nil
-}
-
-// Should check len(err), actually builds "master" package and will build dependencies
-func buildLocal (path string, debug *log.Logger, warn *log.Logger) []error {
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		err := validateConf(filepath.Join(path, "stashpak.toml"), warn)
-		if err != nil {
-			warn.Fatalln("Validation of configuration failed:", err)
-		}
-	})
-	pkg, err := decodeConf(filepath.Join(path, "stashpak.toml"), warn)
-	if pkg.Metadata.Type == "repo" {
-		errChan := make(chan error, 1)
-		req := elevateRequest{
-			cmdline:	[]string{"pacman", "-S", "--noconfirm", pkg.Metadata.Repo},
-			err:		errChan,
-		}
-		elevate <- req
-		err := <- errChan
-		if err != nil {
-			warn.Fatalln("Could not install package from repo:", err)
-		}
-		return []error{}
-	}
-	var isGit bool
-	var errChan = make(chan error, 32)
-	if err != nil {
-		warn.Fatalln("Could not decode configuration:", err)
-	}
-	wg.Go(func() {
-		cmd := exec.Command("git", "reset")
-		cmd.Stderr = os.Stderr
-		cmd.Dir = path
-		err := cmd.Run()
-		if err != nil {
-			warn.Println("Could not reset path with git:", err)
-			return
-		}
-		cmdline := []string{"clean", "-fdx"}
-		cmd = exec.Command("git", cmdline...)
-		cmd.Dir = path
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			warn.Println("Could not clean path with git:", err)
-			return
-		}
-		isGit = true
-	})
-	wg.Wait()
-	var chrootInstPkgs []string
-	var pkgLock	sync.Mutex
-	var hasFail bool
-	var failLock	sync.Mutex
-	var hostInstPkgs []string
-	var hostPkgLock sync.Mutex
-	for _, dep := range pkg.Depends {
-		switch dep.SourceType {
-			case "git":
-				wg.Go(func() {
-					path, errs := buildPkg(debug, warn, dep.Pkgname, dep.Source, dep.BuildPrefix)
-					if len(errs) > 0 {
-						failLock.Lock()
-						hasFail = true
-						failLock.Unlock()
-						warn.Println("Dependency", dep.Pkgname, "failed to build")
-					} else {
-						entries, err := os.ReadDir(path)
-						if err != nil {
-							failLock.Lock()
-							hasFail = true
-							failLock.Unlock()
-							warn.Println("Could not parse build directory:", err)
-						} else {
-							for _, ent := range entries {
-								if ent.IsDir() {
-									continue
-								} else if ent.Type().IsRegular() {
-									if strings.Contains(ent.Name(), ".pkg") && ! strings.HasSuffix(ent.Name(), ".log") {
-										pkgLock.Lock()
-										chrootInstPkgs = append(chrootInstPkgs, filepath.Join(path, ent.Name()))
-										pkgLock.Unlock()
-										if dep.Install {
-											hostPkgLock.Lock()
-											hostInstPkgs = append(hostInstPkgs, filepath.Join(path, ent.Name()))
-											hostPkgLock.Unlock()
-										}
-									}
-								}
-							}
-						}
-					}
-				})
-			case "repo":
-				wg.Go(func() {
-					res := getPkg(debug, warn, dep.Source + "/" + dep.Pkgname)
-					pkgLock.Lock()
-					chrootInstPkgs = append(chrootInstPkgs, res...)
-					pkgLock.Unlock()
-				})
-			default:
-				warn.Fatalln("Could not build package: unrecognized source type")
-		}
-	}
-
-	wg.Wait()
-
-	if hasFail {
-		warn.Fatalln("Could not build dependency tree: One or more errors occured")
-	}
-	go func () {
-		wg.Wait()
-		close(errChan)
-	} ()
-
-	var extraPkgCmd []string
-	for _, pkg := range chrootInstPkgs {
-		extraPkgCmd = append(extraPkgCmd, "-I", pkg)
-	}
-
-	var req elevateRequest
-	req.wd = path
-	req.cmdline = []string{
-		pkg.Metadata.BuildPrefix,
-		"--",
-	}
-	if len(extraPkgCmd) > 0 {
-		req.cmdline = append(req.cmdline, extraPkgCmd...)
-	}
-	req.cmdline = append(req.cmdline, "--", "PKGEXT=.pkg.tar",)
-
-	req.err = make(chan error)
-
-	elevate <- req
-
-	err = <- req.err
-
-	var ret []error
-	for sig := range errChan {
-		ret = append(ret, sig)
-	}
-
-	if isGit {
-		instList := []string{}
-		ent, err := os.ReadDir(path)
-		if err != nil {
-			warn.Println("Could not read directory:", err)
-			errChan <- errors.New("Could not read directory: " + err.Error())
-		} else {
-			for _, info := range ent {
-				if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
-					instList = append(instList, filepath.Join(path, info.Name()))
-				}
-			}
-		}
-		if len(instList) > 0 {
-			if len(hostInstPkgs) > 0 {
-				var req elevateRequest
-				req.cmdline = []string{"pacman", "-U", "--asdeps"}
-				req.cmdline = append(req.cmdline, hostInstPkgs...)
-				req.err = make(chan error)
-				elevate <- req
-				err := <- req.err
-				if err != nil {
-					warn.Fatalln("Could not install one or more dependencies:", err)
-				}
-			}
-			var req elevateRequest
-			req.cmdline = []string{"pacman", "-U", "--noconfirm"}
-			req.cmdline = append(req.cmdline, instList...)
-			req.err = make(chan error)
-			elevate <- req
-
-			err := <- req.err
-			if err != nil {
-				warn.Println("Could not install package:", err)
-			}
-		}
-	}
-	return ret
 }
 
 func validateConf (path string, warn *log.Logger) []error {
@@ -287,170 +105,6 @@ func validateConf (path string, warn *log.Logger) []error {
 		ret = append(ret, sig)
 	}
 	return ret
-}
-
-func elevator(debug *log.Logger, warn *log.Logger) {
-	var hasLoop bool = true
-	for sig := range elevate {
-		if hasLoop == false {
-			go func () {
-			debug.Println("Starting elevate loop")
-			hasLoop = true
-			time.Sleep(2 * time.Minute)
-			for {
-				ctx := context.TODO()
-				ctxNew, canc := context.WithTimeout(ctx, 5 * time.Second)
-				cmd := exec.CommandContext(ctxNew, conf.elevateProgram, "true")
-				cmd.Stderr = os.Stderr
-				cmd.Stdout = os.Stdout
-				err := cmd.Run()
-				canc()
-				if err != nil {
-					warn.Println("Could not loop elevate status:", err)
-					break
-				}
-			}
-			} ()
-		}
-		go func () {
-			signal := sig
-			var wd string
-			if len(signal.wd) > 0 {
-				wd = signal.wd
-			} else {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					warn.Fatalln("Could not get user home:", err)
-				}
-				wd = home
-			}
-
-			debug.Println("Starting privileged command:", signal.cmdline)
-			debug.Println("Using working directory:", wd)
-
-			if signal.timeout == 0 {
-				cmd := exec.Command(conf.elevateProgram, signal.cmdline...)
-				cmd.Dir = wd
-				cmd.Stderr = os.Stderr
-				cmd.Stdout = os.Stdout
-
-				err := cmd.Run()
-				if err != nil {
-					warn.Println("Elevated command has failed:", err)
-					signal.err <- err
-				} else {
-					signal.err <- nil
-				}
-			} else {
-				ctx := context.TODO()
-				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
-				cmd := exec.CommandContext(ctxTimeout, conf.elevateProgram, signal.cmdline...)
-				cmd.Stderr = os.Stderr
-				cmd.Stdout = os.Stdout
-				cmd.Dir = wd
-				err := cmd.Run()
-				cancelFunc()
-				if err != nil {
-					warn.Println("Elevated command has failed:", err)
-					signal.err <- err
-				} else {
-					signal.err <- nil
-				}
-			}
-		} ()
-	}
-}
-
-func getRemoteGit(path string, url string) error {
-	err := os.RemoveAll(path)
-	if os.IsNotExist(err) {} else if err != nil {
-		return errors.New("Could not remove previous repository: " + err.Error())
-	}
-	cmdline := []string{
-		"clone",
-		url,
-		path,
-	}
-
-	cmd := exec.Command("git", cmdline...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:	syscall.SIGTERM,
-	}
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	cmd.Stdin = os.Stdin
-	err = cmd.Run()
-	if err != nil {
-		return errors.New("Could not download repository: " + err.Error())
-	}
-	return nil
-}
-
-func updateRepo(debug *log.Logger, warn *log.Logger) {
-	path := filepath.Join(
-		xdgDir.cacheDir,
-		"stashpak",
-		"repo",
-	)
-	wd := filepath.Join(
-		xdgDir.cacheDir,
-		"stashpak",
-	)
-	_, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(wd, 0700)
-		if err != nil {
-			warn.Fatalln("Could not create cache directory:", err)
-		}
-		cmdl := []string{
-			"clone",
-			repoUrl,
-			"repo",
-			"--depth=1",
-		}
-		cmd := exec.Command("git", cmdl...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Dir = wd
-		err = cmd.Run()
-		if err != nil {
-			warn.Fatalln("Could not clone repository:", err)
-		}
-	} else if err != nil {
-		warn.Fatalln("Could not stat repo:", err)
-	}
-
-
-	cmdline := []string{
-		"pull",
-	}
-
-	cmd := exec.Command("git", cmdline...)
-	cmd.Dir = path
-	debug.Println("Updating local copy of repository...")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	err = cmd.Run()
-	if err != nil {
-		warn.Fatalln("Could not update local copy of repository:", err)
-	}
-
-}
-
-func pickBuildDir(warn *log.Logger, pkgname string) string {
-	stat, err := os.Stat(xdgDir.cacheDir)
-	if err != nil {
-		warn.Fatalln("Could not stat XDG Cache Directory:", err)
-	}
-	if stat.IsDir() == false {
-		warn.Fatalln("XDG Cache Directory invalid: not a directory")
-	}
-	path := filepath.Join(xdgDir.cacheDir, "stashpak", "git", pkgname)
-	err = os.MkdirAll(path, 0700)
-	if err != nil {
-		warn.Fatalln("Could not create build path:", err)
-	}
-	return path
 }
 
 // Returns the absolute location of a package file
@@ -570,12 +224,9 @@ func processOpts(logger *log.Logger) {
 	}
 }
 
-// Attempts to build one or more Portable packages
-func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
+// Attempts to build and install one or more Portable Arch packages
+func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 	var wg sync.WaitGroup
-	var errChan = make(chan error, 2)
-
-
 	var arch string
 
 	// From `go tool dist list`
@@ -586,26 +237,28 @@ func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
 	}
 	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
-
-	for _, pkg := range pkgs {
-		errs := buildLocal(filepath.Join(baseDir, pkg), debug, warn)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				errChan <- err
-			}
-		}
-	}
-
+	var pkgsChan = make(chan []pkginfo, 5)
+	var pkgFiles []pkginfo
+	var pkgsLock sync.Mutex
+	pkgsLock.Lock()
 	go func () {
-		wg.Wait()
-		close(errChan)
-	} ()
-
-	for sig := range errChan {
-		if sig != nil {
-			return errors.New("One or more packages have failed building")
+		defer pkgsLock.Unlock()
+		for pkg := range pkgsChan {
+			pkgFiles = append(pkgFiles, pkg...)
 		}
+	} ()
+	for _, pkg := range pkgs {
+		pkgsChan <- buildPackage(
+			filepath.Join(baseDir, pkg),
+			debug,
+			warn,
+		)
 	}
+
+	wg.Wait()
+	close(pkgsChan)
+	pkgsLock.Lock()
+	instSlice(pkgFiles, debug, warn)
 	return nil
 
 }
@@ -629,15 +282,13 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			if err != nil {
 				warn.Fatalln("Could not get working directory:", err)
 			}
-			errs := buildLocal(wd, logger, warn)
-			if len(errs) > 0 {
-				warn.Fatalln("Could not build package:", errs)
-			}
+			deps := buildPackage(wd, logger, warn)
+			instSlice(deps, logger, warn)
 		case "get":
 				if len(cmdSlice) < 2 {
 					warn.Fatalln("Action get requires one or more arguments")
 				}
-				err := getPkgs(logger, warn, cmdSlice[1:])
+				err := buildRepoPkgs(logger, warn, cmdSlice[1:])
 				if err != nil {
 					warn.Fatalln(err)
 				}

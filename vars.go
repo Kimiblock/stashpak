@@ -53,11 +53,19 @@ type DependsSection struct {
 	// Source can be either a string of git URL (type git), or repo name (type repo) to download from locally defined repositories.
 	SourceType	string
 	Source		string
-	// The build prefix for type git. Defaults to "extra-x86_64-build".
+	// The build prefix for type git. Defaults to "extra-x86_64-build". Note that this might be empty.
 	BuildPrefix	string
 	Install		bool
+	Depends		[]DependsSection
 }
 
 type envConf struct {
 	elevateProgram		string
+}
+
+// Type pkginfo describes the information of a package file
+type pkginfo struct {
+	// pkgname describes the path for a package
+	pkgname		string
+	install		bool
 }
