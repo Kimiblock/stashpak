@@ -11,6 +11,7 @@ type = "build"
 # Your GitHub user name
 maintainer	= "exampleUser"
 
+# A dependency tree. Depth can be 1 to infinity (whoa)
 [[depends]]
 # Optional
 #buildPrefix	= "extra-x86_64-build"
@@ -22,6 +23,19 @@ pkgname		= "portable-packer"
 sourceType	= "repo"
 source		= "archlinuxcn"
 
+# Nested dependency.
+#[[depends.depends]]
+#pkgname	= "lib32-mesa"
+#sourceType	= "repo"
+#source		= "multilib"
+
+# Nested dependency of the previous dependency
+#[[depends.depends.depends]]
+#pkgname	= "mesa"
+#sourceType	= "repo"
+#source		= "multilib"
+
+# A new dependency tree
 [[depends]]
 # Optional
 #buildPrefix	= "extra-x86_64-build"
