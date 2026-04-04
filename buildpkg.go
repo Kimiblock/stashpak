@@ -27,7 +27,6 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]str
 	}
 
 	wg.Wait()
-	debug.Println("Resolved dependency list for", dep.Pkgname, ":", deps)
 	switch dep.SourceType {
 		case "git":
 			pth := prepDepRepo(debug, warn, dep.Pkgname, dep.Source)
@@ -54,6 +53,7 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]str
 	close(depsChan)
 	depsLock.Lock()
 	depsLock.Unlock()
+	debug.Println("Resolved dependency list for", dep.Pkgname, ":", deps)
 	return deps
 }
 
