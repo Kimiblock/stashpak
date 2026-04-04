@@ -23,7 +23,6 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 		}
 	} ()
 	var path string = filepath.Join(xdgDir.cacheDir, "stashpak/git", pkgname)
-
 	debug.Println("Preparing a build directory...")
 	cmdline := []string{
 		"remote",
@@ -51,34 +50,7 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 			errChan <- err
 		}
 	}
-	cmdline = []string{
-		"reset",
-	}
-	cmd = exec.Command("git", cmdline...)
-	cmd.Dir = path
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not reset repository:", err)
-		errChan <- err
-	}
-	cmdline = []string{
-		"clean",
-		"-fdx",
-	}
-	cmd = exec.Command("git", cmdline...)
-	cmd.Dir = path
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
-	err = cmd.Run()
-	if err != nil {
-		warn.Println("Could not clean repository:", err)
-		errChan <- err
-	}
-
+	cleanDir(path, debug, warn)
 	cmdline = []string{
 		"pull",
 	}
@@ -97,9 +69,10 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 }
 
 // Builds a package in a git repository, returns a slice of package files. This function does not resolve dependencies.
+// Warning: prefix should be set!
+// pkgname can be empty or base or actual name
 func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) []string {
 	debug.Println("Building package", pkgname, "with dependency list:", depPaths)
-
 	var elereq elevateRequest
 	elereq.wd = path
 	elereq.cmdline = []string{prefix, "--"}
