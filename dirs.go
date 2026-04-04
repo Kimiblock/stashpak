@@ -60,12 +60,6 @@ func listPkgs(path string, debug *log.Logger, warn *log.Logger) []pkginfo {
 	return inf
 }
 
-// Installs package from a directory
-func instPkgs(path string, debug *log.Logger, warn *log.Logger) {
-	pkgs := listPkgs(path, debug, warn)
-	instSlice(pkgs, debug, warn)
-}
-
 // Installs packages from a slice
 func instSlice(pkgslice []pkginfo, debug *log.Logger, warn *log.Logger) {
 	var elereq elevateRequest
