@@ -629,10 +629,8 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			if err != nil {
 				warn.Fatalln("Could not get working directory:", err)
 			}
-			errs := buildLocal(wd, logger, warn)
-			if len(errs) > 0 {
-				warn.Fatalln("Could not build package:", errs)
-			}
+			deps := buildPackage(wd, logger, warn)
+			instSlice(deps, logger, warn)
 		case "get":
 				if len(cmdSlice) < 2 {
 					warn.Fatalln("Action get requires one or more arguments")
