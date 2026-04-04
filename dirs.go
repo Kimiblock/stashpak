@@ -15,7 +15,7 @@ func delPkgs(path string, debug *log.Logger, warn *log.Logger) {
 	for _, file := range files {
 		wg.Go(func() {
 			err := os.RemoveAll(
-				filepath.Join(file),
+				filepath.Join(file.pkgname),
 			)
 			if err != nil {
 				warn.Fatalln("Could not remove a package file:", err)
@@ -27,8 +27,8 @@ func delPkgs(path string, debug *log.Logger, warn *log.Logger) {
 	wg.Wait()
 }
 
-// Lists package files in a directory
-func listPkgs(path string, debug *log.Logger, warn *log.Logger) []string {
+// Lists package files in a directory, info.install will be true
+func listPkgs(path string, debug *log.Logger, warn *log.Logger) []pkginfo {
 	ent, err := os.ReadDir(path)
 	if err != nil {
 		warn.Fatalln("Could not read directory:", err)
@@ -50,7 +50,14 @@ func listPkgs(path string, debug *log.Logger, warn *log.Logger) []string {
 	}
 	wg.Wait()
 	close(listChan)
-	return list
+	var inf []pkginfo
+	for _, name := range list {
+		inf = append(inf, pkginfo{
+			pkgname:	name,
+			install:	true,
+		})
+	}
+	return inf
 }
 
 // Installs package from a directory
@@ -60,10 +67,15 @@ func instPkgs(path string, debug *log.Logger, warn *log.Logger) {
 }
 
 // Installs packages from a slice
-func instSlice(pkgs []string, debug *log.Logger, warn *log.Logger) {
+func instSlice(pkgs []pkginfo, debug *log.Logger, warn *log.Logger) {
 	var elereq elevateRequest
 	elereq.cmdline = []string{"pacman", "--noconfirm", "-U"}
-	elereq.cmdline = append(elereq.cmdline, pkgs...)
+	if len(pkgs) == 0 {
+		return
+	}
+	for _, pkg := range pkgs {
+		elereq.cmdline = append(elereq.cmdline, pkg.pkgname)
+	}
 	elereq.err = make(chan error, 1)
 	elevate <- elereq
 	err := <- elereq.err

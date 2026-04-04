@@ -7,11 +7,11 @@ import (
 )
 
 // Resolves dependencies and build packages
-func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]string) {
+func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]pkginfo) {
 	debug.Println("Obtaining dependency", dep.Pkgname)
 	var wg sync.WaitGroup
-	var depsChan = make(chan []string, 4)
-	var deps []string
+	var deps []pkginfo
+	var depsChan = make(chan []pkginfo, 4)
 	var depsLock sync.RWMutex
 	depsLock.Lock()
 	go func () {
@@ -36,8 +36,7 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]str
 			} else {
 				pfx = dep.BuildPrefix
 			}
-
-			depsChan <- build(
+			depsList := build(
 				debug,
 				warn,
 				dep.Pkgname,
@@ -45,8 +44,46 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]str
 				pfx,
 				deps,
 			)
+			if dep.Install {
+				for _, val := range depsList {
+					depsChan <- []pkginfo{
+						{
+							install: true,
+							pkgname: val,
+						},
+					}
+				}
+			} else {
+				for _, val := range depsList {
+					depsChan <- []pkginfo{
+						{
+							install: false,
+							pkgname: val,
+						},
+					}
+				}
+			}
 		case "repo":
-			depsChan <- getPkg(debug, warn, dep.Source + "/" + dep.Pkgname)
+			pkgs := getPkg(debug, warn, dep.Source + "/" + dep.Pkgname)
+			if dep.Install {
+				for _, val := range pkgs {
+					depsChan <- []pkginfo{
+						{
+							install: true,
+							pkgname: val,
+						},
+					}
+				}
+			} else {
+				for _, val := range pkgs {
+					depsChan <- []pkginfo{
+						{
+							install: false,
+							pkgname: val,
+						},
+					}
+				}
+			}
 		default:
 			warn.Fatalln("Invalid dependency type for", dep.Pkgname, ":", dep.SourceType)
 	}
@@ -58,8 +95,9 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]str
 }
 
 // The new-style builder function for building a package
-func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []string {
+func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []pkginfo {
 	var wg sync.WaitGroup
+	var ret []pkginfo
 	wg.Go(func() {
 		err := validateConf(filepath.Join(baseDir, "stashpak.toml"), warn)
 		if err != nil {
@@ -71,10 +109,18 @@ func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []string 
 		warn.Fatalln("Could not decode configuration:", err)
 	}
 	if pkg.Metadata.Type == "repo" {
-		return getPkg(debug, warn, pkg.Metadata.Repo)
+		pkgs := getPkg(debug, warn, pkg.Metadata.Repo)
+
+		for _, val := range pkgs {
+			ret = append(ret, pkginfo{
+				pkgname: val,
+				install: true,
+			})
+		}
+		return ret
 	}
-	depsChan := make(chan []string, 16)
-	var deps []string
+	depsChan := make(chan []pkginfo, 16)
+	var deps []pkginfo
 	var depsLock sync.Mutex
 	depsLock.Lock()
 	go func () {
@@ -100,13 +146,21 @@ func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []string 
 		pfx = pkg.Metadata.BuildPrefix
 	}
 
-	return append(deps, build(
+	prods := build(
 		debug,
 		warn,
 		"base",
 		baseDir,
 		pfx,
 		deps,
-		)...,
-	)
+		)
+
+	for _, val := range prods {
+		deps = append(deps, pkginfo{
+			pkgname: val,
+			install: true,
+		})
+	}
+
+	return deps
 }

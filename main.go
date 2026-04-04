@@ -583,8 +583,8 @@ func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
 	}
 	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
-	var pkgsChan = make(chan []string, 5)
-	var pkgFiles []string
+	var pkgsChan = make(chan []pkginfo, 5)
+	var pkgFiles []pkginfo
 	var pkgsLock sync.Mutex
 	pkgsLock.Lock()
 	go func () {

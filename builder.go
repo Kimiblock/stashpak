@@ -71,13 +71,13 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 // Builds a package in a git repository, returns a slice of package files. This function does not resolve dependencies.
 // Warning: prefix should be set!
 // pkgname can be empty or base or actual name
-func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, depPaths []string) []string {
-	debug.Println("Building package", pkgname, "with dependency list:", depPaths)
+func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, deps []pkginfo) []string {
+	debug.Println("Building package", pkgname, "with dependency list:", deps)
 	var elereq elevateRequest
 	elereq.wd = path
 	elereq.cmdline = []string{prefix, "--"}
-	for _, dep := range depPaths {
-		elereq.cmdline = append(elereq.cmdline, "-I", dep)
+	for _, dep := range deps {
+		elereq.cmdline = append(elereq.cmdline, "-I", dep.pkgname)
 	}
 	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar")
 	elereq.err = make(chan error, 1)

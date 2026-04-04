@@ -62,3 +62,10 @@ type DependsSection struct {
 type envConf struct {
 	elevateProgram		string
 }
+
+// Type pkginfo describes the information of a package file
+type pkginfo struct {
+	// pkgname describes the path for a package
+	pkgname		string
+	install		bool
+}
