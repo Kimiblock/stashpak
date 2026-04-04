@@ -8,6 +8,25 @@ import (
 	"path/filepath"
 )
 
+// Deletes package files in a directory
+func delPkgs(path string, debug *log.Logger, warn *log.Logger) {
+	var wg sync.WaitGroup
+	files := listPkgs(path, debug, warn)
+	for _, file := range files {
+		wg.Go(func() {
+			err := os.RemoveAll(
+				filepath.Join(file),
+			)
+			if err != nil {
+				warn.Fatalln("Could not remove a package file:", err)
+			} else {
+				debug.Println("Removed", file)
+			}
+		})
+	}
+	wg.Wait()
+}
+
 // Lists package files in a directory
 func listPkgs(path string, debug *log.Logger, warn *log.Logger) []string {
 	ent, err := os.ReadDir(path)
