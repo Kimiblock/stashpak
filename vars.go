@@ -56,6 +56,7 @@ type DependsSection struct {
 	// The build prefix for type git. Defaults to "extra-x86_64-build".
 	BuildPrefix	string
 	Install		bool
+	Depends		[]string
 }
 
 type envConf struct {
