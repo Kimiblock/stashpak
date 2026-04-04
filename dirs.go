@@ -67,6 +67,7 @@ func instSlice(pkgslice []pkginfo, debug *log.Logger, warn *log.Logger) {
 	var pkgs []string
 	for _, pkg := range pkgslice {
 		if pkg.install {
+			debug.Println("Adding package", pkg.pkgname, "to list")
 			pkgs = append(pkgs, pkg.pkgname)
 		}
 	}
