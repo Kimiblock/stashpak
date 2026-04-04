@@ -99,16 +99,14 @@ func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []string 
 	} else {
 		pfx = pkg.Metadata.BuildPrefix
 	}
-	depsChan <- build(
+
+	return append(deps, build(
 		debug,
 		warn,
 		"base",
 		baseDir,
 		pfx,
 		deps,
+		)...,
 	)
-	close(depsChan)
-	depsLock.Lock()
-	depsLock.Unlock()
-	return deps
 }
