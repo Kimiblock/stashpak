@@ -67,15 +67,19 @@ func instPkgs(path string, debug *log.Logger, warn *log.Logger) {
 }
 
 // Installs packages from a slice
-func instSlice(pkgs []pkginfo, debug *log.Logger, warn *log.Logger) {
+func instSlice(pkgslice []pkginfo, debug *log.Logger, warn *log.Logger) {
 	var elereq elevateRequest
 	elereq.cmdline = []string{"pacman", "--noconfirm", "-U"}
+	var pkgs []string
+	for _, pkg := range pkgslice {
+		if pkg.install {
+			pkgs = append(pkgs, pkg.pkgname)
+		}
+	}
 	if len(pkgs) == 0 {
 		return
 	}
-	for _, pkg := range pkgs {
-		elereq.cmdline = append(elereq.cmdline, pkg.pkgname)
-	}
+	elereq.cmdline = append(elereq.cmdline, pkgs...)
 	elereq.err = make(chan error, 1)
 	elevate <- elereq
 	err := <- elereq.err
