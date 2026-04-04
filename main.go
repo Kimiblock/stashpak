@@ -570,12 +570,9 @@ func processOpts(logger *log.Logger) {
 	}
 }
 
-// Attempts to build one or more Portable packages
-func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
+// Attempts to build and install one or more Portable Arch packages
+func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 	var wg sync.WaitGroup
-	var errChan = make(chan error, 2)
-
-
 	var arch string
 
 	// From `go tool dist list`
@@ -586,26 +583,28 @@ func getPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
 	}
 	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
-
-	for _, pkg := range pkgs {
-		errs := buildLocal(filepath.Join(baseDir, pkg), debug, warn)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				errChan <- err
-			}
-		}
-	}
-
+	var pkgsChan = make(chan []string, 5)
+	var pkgFiles []string
+	var pkgsLock sync.Mutex
+	pkgsLock.Lock()
 	go func () {
-		wg.Wait()
-		close(errChan)
-	} ()
-
-	for sig := range errChan {
-		if sig != nil {
-			return errors.New("One or more packages have failed building")
+		defer pkgsLock.Unlock()
+		for pkg := range pkgsChan {
+			pkgFiles = append(pkgFiles, pkg...)
 		}
+	} ()
+	for _, pkg := range pkgs {
+		pkgsChan <- buildPackage(
+			filepath.Join(baseDir, pkg),
+			debug,
+			warn,
+		)
 	}
+
+	wg.Wait()
+	close(pkgsChan)
+	pkgsLock.Lock()
+	instSlice(pkgFiles, debug, warn)
 	return nil
 
 }
@@ -635,7 +634,7 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 				if len(cmdSlice) < 2 {
 					warn.Fatalln("Action get requires one or more arguments")
 				}
-				err := getPkgs(logger, warn, cmdSlice[1:])
+				err := buildRepoPkgs(logger, warn, cmdSlice[1:])
 				if err != nil {
 					warn.Fatalln(err)
 				}
