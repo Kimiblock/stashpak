@@ -224,17 +224,24 @@ func processOpts(logger *log.Logger) {
 	}
 }
 
+func getArch() (string, error) {
+	arch := runtime.GOARCH
+	// From `go tool dist list`
+	switch arch {
+		case "amd64":
+			return "x86_64", nil
+		default:
+			return "", errors.New("Unsupported architecture: " + arch)
+	}
+}
+
 // Attempts to build and install one or more Portable Arch packages
 func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 	var wg sync.WaitGroup
-	var arch string
+	arch, err := getArch()
 
-	// From `go tool dist list`
-	switch runtime.GOARCH {
-		case "amd64":
-			arch = "x86_64"
-		default:
-			warn.Fatalln("Could not build repo package: architecture", runtime.GOARCH, "not supported yet")
+	if err != nil {
+		warn.Fatalln("Could not build package:", err)
 	}
 	baseDir := filepath.Join(xdgDir.cacheDir, "stashpak", "repo", arch)
 	var pkgsChan = make(chan []pkginfo, 5)
@@ -292,6 +299,8 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 				if err != nil {
 					warn.Fatalln(err)
 				}
+		case "list":
+			logger.Println(getPkgsList(logger, warn))
 		default:
 			warn.Fatalln("Could not execute action", action + ":", "unknown")
 
