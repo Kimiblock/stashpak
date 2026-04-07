@@ -69,3 +69,9 @@ type pkginfo struct {
 	pkgname		string
 	install		bool
 }
+
+// This type describes a locally installed package
+type installedPackage struct {
+	name		string // pkgname
+	installedVer	string
+}
