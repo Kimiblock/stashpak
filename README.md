@@ -8,11 +8,14 @@ stashpak [action] (...arguments)
 
 ## Actions
 ### validate
-Validate takes one or more argument: the path to a package configuration. It parses and reports any decode or logical error.\
+Validate takes one or more argument: the path to a package configuration. It parses and reports any decode or logical error.
 ### install-local
 Takes no argument and works in the current directory to build and install a Portable Arch package.
 
 A configuration file named `stashpak.toml` must exist.
+
+### list
+Lists locally installed Portable packages (excluding ones from external repos)
 
 ### get
 Takes one or more packages to install from the Portable Arch repo.
