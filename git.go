@@ -111,6 +111,6 @@ func updateRepo(debug *log.Logger, warn *log.Logger) {
 	cmd.Stdout = os.Stdout
 	err = cmd.Run()
 	if err != nil {
-		warn.Fatalln("Could not update local copy of repository:", err)
+		warn.Println("Could not update local copy of repository:", err)
 	}
 }
