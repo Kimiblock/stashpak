@@ -127,25 +127,63 @@ func listPortablePkgs(logger, warn *log.Logger) []installedPackage {
 			defer srcinfo.Close()
 			scanner := bufio.NewScanner(srcinfo)
 			var pkgver string
+			var pkgrel string
+			var epoch string
+			type info struct {
+				pkgver	bool
+				epoch	bool
+				pkgrel	bool
+			}
+			var inf info
 			for scanner.Scan() {
 				line := strings.TrimPrefix(scanner.Text(), "	")
-				if strings.HasPrefix(strings.TrimSpace(line), "pkgver") {
+				if strings.HasPrefix(strings.TrimSpace(line), "pkgver") && ! inf.pkgrel {
 					sp := strings.Split(line, " ")
 					if len(sp) != 3 {
 						warn.Println("Could not decode SRCINFO: column mismatch")
 						return
 					}
 					pkgver = sp[2]
-					break
+					inf.pkgver = true
+					continue
+				}
+				if strings.HasPrefix(strings.TrimSpace(line), "pkgrel") && ! inf.pkgrel {
+					sp := strings.Split(line, " ")
+					if len(sp) != 3 {
+						warn.Println("Could not decode SRCINFO: column mismatch")
+						return
+					}
+					pkgrel = sp[2]
+					inf.pkgrel = true
+					continue
+				}
+				if strings.HasPrefix(strings.TrimSpace(line), "epoch") && ! inf.epoch {
+					sp := strings.Split(line, " ")
+					if len(sp) != 3 {
+						warn.Println("Could not decode SRCINFO: column mismatch")
+						return
+					}
+					epoch = sp[2]
+					inf.epoch = true
+					continue
 				}
 			}
-			if len(pkgver) == 0 {
+			var finalVer string
+			if inf.epoch {
+				finalVer = epoch + ":"
+			}
+			if inf.pkgver {
+				finalVer = finalVer + pkgver
+			} else {
 				warn.Println("Could not decode SRCINFO: version unknown")
 				return
 			}
+			if inf.pkgrel {
+				finalVer = finalVer + "-" + pkgrel
+			}
 			pkgsChan <- installedPackage{
 				name:		ent.Name(),
-				repoVer:	pkgver,
+				repoVer:	finalVer,
 			}
 		})
 	}
