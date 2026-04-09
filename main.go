@@ -284,14 +284,14 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 					warn.Println("Configuration", file, "failed to pass validation:", errs)
 				}
 			}
-		case "install-local":
+		case "install-local", "build", "build-local":
 			wd, err := os.Getwd()
 			if err != nil {
 				warn.Fatalln("Could not get working directory:", err)
 			}
 			deps := buildPackage(wd, logger, warn)
 			instSlice(deps, logger, warn)
-		case "get":
+		case "get", "install":
 				if len(cmdSlice) < 2 {
 					warn.Fatalln("Action get requires one or more arguments")
 				}
