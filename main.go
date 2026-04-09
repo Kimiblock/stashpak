@@ -292,13 +292,39 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			deps := buildPackage(wd, logger, warn)
 			instSlice(deps, logger, warn)
 		case "get", "install":
-				if len(cmdSlice) < 2 {
-					warn.Fatalln("Action get requires one or more arguments")
+			if len(cmdSlice) < 2 {
+				warn.Fatalln("Action get requires one or more arguments")
+			}
+			err := buildRepoPkgs(logger, warn, cmdSlice[1:])
+			if err != nil {
+				warn.Fatalln(err)
+			}
+		case "update", "upgrade":
+			timeNow := time.Now()
+			pkgs := getPkgsList(logger, warn)
+			var updPkgs []string
+			for _, pkg := range pkgs {
+				if pkg.hasUpdate {
+					updPkgs = append(updPkgs, pkg.name)
 				}
-				err := buildRepoPkgs(logger, warn, cmdSlice[1:])
-				if err != nil {
-					warn.Fatalln(err)
-				}
+			}
+			pkgsNum := len(updPkgs)
+			if pkgsNum == 0 {
+				logger.Println("Up to date")
+				return
+			}
+			err := buildRepoPkgs(logger, warn, updPkgs)
+			if err != nil {
+				warn.Fatalln(err)
+			}
+			var trailingS string
+			switch pkgsNum {
+				case 0, 1:
+					trailingS = ""
+				default:
+					trailingS = "s"
+			}
+			logger.Println("Updated", pkgsNum, "package" + trailingS, "in", time.Since(timeNow))
 		case "list":
 			pkgs := getPkgsList(logger, warn)
 			w := tabwriter.NewWriter(os.Stdout, 20, 8, 8, '	', tabwriter.TabIndent)
