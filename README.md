@@ -20,6 +20,9 @@ Lists locally installed Portable packages (excluding ones from external repos)
 ### get
 Takes one or more packages to install from the Portable Arch repo.
 
+### update / upgrade
+Updates locally built packages.
+
 # Dependencies
 
 - systemd
