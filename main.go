@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"text/tabwriter"
 
 	"github.com/BurntSushi/toml"
 	alpm "github.com/Jguer/go-alpm/v2"
@@ -271,9 +274,6 @@ func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 }
 func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 	cmdSlice := os.Args[1:]
-	logger.Println()
-
-
 	action := cmdSlice[0]
 	switch action {
 		case "validate":
@@ -300,7 +300,20 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 					warn.Fatalln(err)
 				}
 		case "list":
-			logger.Println(getPkgsList(logger, warn))
+			pkgs := getPkgsList(logger, warn)
+			w := tabwriter.NewWriter(os.Stdout, 20, 8, 8, '	', tabwriter.TabIndent)
+			fmt.Fprintln(w, "Package Name\tVersion Installed\tVersion in Store\tHas Updates")
+			for _, pkg := range pkgs {
+				var hasUpd string
+				switch pkg.hasUpdate {
+					case true:
+						hasUpd = "Yes"
+					case false:
+						hasUpd = "No"
+				}
+				fmt.Fprintln(w, pkg.name + "\t" + pkg.installedVer + "\t" + pkg.repoVer + "\t" + hasUpd)
+			}
+			w.Flush()
 		default:
 			warn.Fatalln("Could not execute action", action + ":", "unknown")
 
