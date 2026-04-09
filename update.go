@@ -40,9 +40,7 @@ func parsePkgsList(cmd *exec.Cmd) []installedPackage {
 		}
 		sp := strings.Split(line, " ")
 		if len(sp) != 2 {
-			panic(
-				"Column mismatch from pacman -Q: Expected 2, got " + strconv.Itoa(len(sp)) + " " + line,
-			)
+			return
 		}
 		pkg := strings.TrimSpace(sp[0])
 		ver := strings.TrimSpace(sp[1])
