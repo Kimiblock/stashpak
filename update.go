@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -146,7 +145,7 @@ func listPortablePkgs(logger, warn *log.Logger) []installedPackage {
 			}
 			pkgsChan <- installedPackage{
 				name:		ent.Name(),
-				installedVer:	pkgver,
+				repoVer:	pkgver,
 			}
 		})
 	}
@@ -171,24 +170,47 @@ func getPkgsList(logger *log.Logger, warn *log.Logger) []installedPackage {
 	list := parsePkgsList(cmd)
 	listPortable := listPortablePkgs(logger, warn)
 	logger.Println("Got", len(list), "local packages")
-	pkgnames := []string{}
-	portablePkgnames := []string{}
 
+	var retWg sync.WaitGroup
+	retWg.Add(1)
+	var retChan = make(chan installedPackage, 512)
 	var ret []installedPackage
-	var retLck sync.Mutex
-
-	for _, pkg := range list {
-		pkgnames = append(pkgnames, pkg.name)
-	}
-	for _, pkg := range listPortable {
-		portablePkgnames = append(portablePkgnames, pkg.name)
-	}
-	for idx, pkg := range portablePkgnames {
-		if slices.Contains(pkgnames, pkg) {
-			retLck.Lock()
-			ret = append(ret, listPortable[idx])
-			retLck.Unlock()
+	go func () {
+		defer retWg.Done()
+		for sig := range retChan {
+			ret = append(ret, sig)
 		}
+	} ()
+	var wg sync.WaitGroup
+	for _, val := range list {
+		valUpper := val
+		wg.Go(func() {
+			var isRepo bool
+			var repoDat installedPackage
+			var localDat installedPackage = valUpper
+			for _, val := range listPortable {
+				if val.name == valUpper.name {
+					isRepo = true
+					repoDat = val
+					break
+				}
+			}
+			if isRepo {
+				var hasUpd bool
+				if isNewer(repoDat.repoVer, localDat.installedVer) {
+					hasUpd = true
+				}
+				retChan <- installedPackage{
+					name:		localDat.name,
+					installedVer:	localDat.installedVer,
+					repoVer:	repoDat.repoVer,
+					hasUpdate:	hasUpd,
+				}
+			}
+		})
 	}
+	wg.Wait()
+	close(retChan)
+	retWg.Wait()
 	return ret
 }

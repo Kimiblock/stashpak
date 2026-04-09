@@ -74,4 +74,6 @@ type pkginfo struct {
 type installedPackage struct {
 	name		string // pkgname
 	installedVer	string
+	repoVer		string
+	hasUpdate	bool
 }
