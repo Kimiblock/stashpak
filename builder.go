@@ -23,12 +23,12 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 	var path string = filepath.Join(xdgDir.cacheDir, "stashpak/git", pkgname)
 	debug.Println("Preparing a build directory...")
 	cmdline := []string{
+		"-C", path,
 		"remote",
 		"get-url",
 		"origin",
 	}
 	cmd := exec.Command("git", cmdline...)
-	cmd.Dir = path
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Pdeathsig:		syscall.SIGTERM,
 	}
