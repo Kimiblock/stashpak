@@ -110,8 +110,8 @@ func listPortablePkgs(logger, warn *log.Logger) []installedPackage {
 			if conf.Metadata.Type == "repo" {
 				pkgsChan <- installedPackage{
 					name:		ent.Name(),
-					installedVer:	"Rolling",
-					repoVer:	"Rolling",
+					installedVer:	"Remote: Rolling",
+					repoVer:	"Remote: Rolling",
 					hasUpdate:	false,
 				}
 				return
