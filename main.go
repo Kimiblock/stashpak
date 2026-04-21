@@ -127,7 +127,7 @@ func getPkg(debug *log.Logger, warn *log.Logger, pkgname string) []string {
 	split := strings.SplitSeq(string(out), "\n")
 	var redownload bool
 	for sp := range split {
-		if strings.HasPrefix(sp, "https://") {
+		if strings.HasPrefix(sp, "http") {
 			redownload = true
 			break
 		}
