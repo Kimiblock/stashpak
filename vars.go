@@ -31,6 +31,7 @@ type xdg struct {
 	cacheDir		string
 	dataDir			string
 	home			string
+	stateHome		string
 }
 
 type pkgConf struct {
