@@ -71,7 +71,9 @@ func listPortablePkgs(logger, warn *log.Logger) []installedPackage {
 	}
 	var wg sync.WaitGroup
 	for _, ent := range entries {
+		entry := ent
 		wg.Go(func() {
+			ent := entry
 			if ! ent.IsDir() {
 				return
 			}
@@ -106,6 +108,12 @@ func listPortablePkgs(logger, warn *log.Logger) []installedPackage {
 				warn.Println("Package", ent.Name(), "is broken with unknown content:", md.Undecoded())
 			}
 			if conf.Metadata.Type == "repo" {
+				pkgsChan <- installedPackage{
+					name:		ent.Name(),
+					installedVer:	"Rolling",
+					repoVer:	"Rolling",
+					hasUpdate:	false,
+				}
 				return
 			}
 			srcPath := filepath.Join(
