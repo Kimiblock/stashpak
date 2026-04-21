@@ -211,6 +211,14 @@ func lookUpXDG(debug *log.Logger, warn *log.Logger) {
 		xdgDir.dataDir = xdgDir.home + "/.local/share"
 		debug.Println("Using default data home: " + xdgDir.dataDir)
 	}
+
+	statehome := os.Getenv("XDG_STATE_HOME")
+	if len(statehome) > 0 {
+		xdgDir.stateHome = statehome
+	} else {
+		xdgDir.stateHome = xdgDir.home + "/.local/state"
+		debug.Println("Using default state home: " + xdgDir.stateHome)
+	}
 }
 
 func processOpts(logger *log.Logger) {
