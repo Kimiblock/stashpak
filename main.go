@@ -266,11 +266,13 @@ func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 		}
 	} ()
 	for _, pkg := range pkgs {
+		cancelFunc := obtainLock(debug, warn, "repo")
 		pkgsChan <- buildPackage(
 			filepath.Join(baseDir, pkg),
 			debug,
 			warn,
 		)
+		cancelFunc()
 	}
 
 	wg.Wait()

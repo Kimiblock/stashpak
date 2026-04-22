@@ -66,7 +66,7 @@ func getRemoteGit(path string, url string) error {
 }
 
 func updateRepo(debug *log.Logger, warn *log.Logger) {
-	cancelFunc := obtainLock(debug, warn)
+	cancelFunc := obtainLock(debug, warn, "repo")
 	defer cancelFunc()
 	path := filepath.Join(
 		xdgDir.cacheDir,
