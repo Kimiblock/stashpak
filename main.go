@@ -302,6 +302,7 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			deps := buildPackage(wd, logger, warn)
 			instSlice(deps, logger, warn)
 		case "get", "install":
+			updateRepo(logger, warn)
 			if len(cmdSlice) < 2 {
 				warn.Fatalln("Action get requires one or more arguments")
 			}
@@ -310,6 +311,7 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 				warn.Fatalln(err)
 			}
 		case "update", "upgrade":
+			updateRepo(logger, warn)
 			timeNow := time.Now()
 			pkgs := getPkgsList(logger, warn)
 			var updPkgs []string
@@ -336,6 +338,7 @@ func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
 			}
 			logger.Println("Updated", pkgsNum, "package" + trailingS, "in", time.Since(timeNow))
 		case "list":
+			updateRepo(logger, warn)
 			pkgs := getPkgsList(logger, warn)
 			w := tabwriter.NewWriter(os.Stdout, 20, 8, 8, '	', tabwriter.TabIndent)
 			fmt.Fprintln(w, "Package Name\tVersion Installed\tVersion in Store\tHas Updates")
@@ -373,6 +376,5 @@ func main () {
 		panic("Could not initialize alpm: " + err.Error())
 	}
 	debug.Println("Initialized ALPM handler for database:", db.Name())
-	updateRepo(debug, warn)
 	cmdlineDispatcher(debug, warn)
 }
