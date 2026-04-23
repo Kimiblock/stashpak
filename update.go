@@ -21,9 +21,6 @@ func parsePkgsList(cmd *exec.Cmd) []installedPackage {
 		panic(err)
 	}
 	rd := bufio.NewScanner(outRaw)
-	go func () {
-		cmd.Run()
-	} ()
 	var pkgsChan = make(chan installedPackage, 512)
 	var pkgsList []installedPackage
 	wgAppend.Go(func() {
@@ -31,6 +28,7 @@ func parsePkgsList(cmd *exec.Cmd) []installedPackage {
 			pkgsList = append(pkgsList, sig)
 		}
 	})
+	cmd.Start()
 	for rd.Scan() {
 		line := rd.Text()
 		wg.Go(func() {
@@ -49,6 +47,7 @@ func parsePkgsList(cmd *exec.Cmd) []installedPackage {
 		}
 		})
 	}
+	cmd.Wait()
 
 	wg.Wait()
 	close(pkgsChan)

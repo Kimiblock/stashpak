@@ -11,8 +11,8 @@ import (
 )
 
 // Obtain a file lock, caller should call cancelFunc
-func obtainLock(debug *log.Logger, warn *log.Logger) (cancelFunc func () ()) {
-	path := filepath.Join(xdgDir.stateHome, "StashPak", "op.lock")
+func obtainLock(debug *log.Logger, warn *log.Logger, operationName string) (cancelFunc func () ()) {
+	path := filepath.Join(xdgDir.stateHome, "StashPak", operationName, ".lock")
 	err := os.MkdirAll(filepath.Dir(path), 0700)
 	if err != nil {
 		warn.Fatalln("Could not obtain lock:", err)

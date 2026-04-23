@@ -119,6 +119,7 @@ func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []pkginfo
 		}
 		return ret
 	}
+
 	depsChan := make(chan []pkginfo, 16)
 	var deps []pkginfo
 	var depsLock sync.Mutex
