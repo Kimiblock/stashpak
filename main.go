@@ -283,6 +283,10 @@ func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 
 }
 func cmdlineDispatcher(logger *log.Logger, warn *log.Logger) {
+	if len(os.Args) < 2 {
+		updateRepo(logger, warn)
+		warn.Fatalln("StashPak requires an action")
+	}
 	cmdSlice := os.Args[1:]
 	action := cmdSlice[0]
 	switch action {
