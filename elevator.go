@@ -31,8 +31,8 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			}
 			} ()
 		}
+		signal := sig
 		go func () {
-			signal := sig
 			var wd string
 			if len(signal.wd) > 0 {
 				wd = signal.wd
