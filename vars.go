@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -10,6 +11,9 @@ var (
 	conf		envConf
 	xdgDir		xdg
 	elevate		= make(chan elevateRequest, 2)
+	cmdAttrs	= syscall.SysProcAttr{
+		Pdeathsig:	syscall.SIGTERM,
+	}
 )
 
 const (
