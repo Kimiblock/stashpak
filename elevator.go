@@ -49,6 +49,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 
 			if signal.timeout == 0 {
 				cmd := exec.Command(conf.elevateProgram, signal.cmdline...)
+				cmd.SysProcAttr = &cmdAttrs
 				cmd.Dir = wd
 				cmd.Stderr = os.Stderr
 				cmd.Stdout = os.Stdout
@@ -64,6 +65,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				ctx := context.TODO()
 				ctxTimeout, cancelFunc := context.WithTimeout(ctx, signal.timeout)
 				cmd := exec.CommandContext(ctxTimeout, conf.elevateProgram, signal.cmdline...)
+				cmd.SysProcAttr = &cmdAttrs
 				cmd.Stderr = os.Stderr
 				cmd.Stdout = os.Stdout
 				cmd.Dir = wd
