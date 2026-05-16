@@ -10,18 +10,24 @@ on:
   release:
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
     steps:
-    - uses: actions/checkout@v4
-
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version-file: go.mod
-    - name: Install ALPM and pacman
-      run: sudo apt install -y libalpm-dev pacman-package-manager
+
+    - name: Install Git and devel
+      run: pacman -Syu base-devel git
+
+    - name: Checkout with Git
+      uses: actions/checkout@v4
+
+
+
 
     - name: Build
       run: go build -v ./...
