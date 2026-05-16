@@ -15,10 +15,6 @@ jobs:
     container:
       image: archlinux:latest
     steps:
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version-file: go.mod
 
     - name: Install Git and devel
       run: pacman -Syu base-devel git
@@ -26,7 +22,10 @@ jobs:
     - name: Checkout with Git
       uses: actions/checkout@v4
 
-
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version-file: go.mod
 
 
     - name: Build
