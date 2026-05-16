@@ -23,6 +23,9 @@ jobs:
     - name: Checkout with Git
       uses: actions/checkout@v4
 
+    - name: Set safe directory
+      run: git config --global --add safe.directory .
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
