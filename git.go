@@ -40,15 +40,21 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	}
 }
 
-func getRemoteGit(path string, url string) error {
+func getRemoteGit(path string, gitInf gitInfo) error {
 	err := os.RemoveAll(path)
 	if os.IsNotExist(err) {} else if err != nil {
 		return errors.New("Could not remove previous repository: " + err.Error())
 	}
 	cmdline := []string{
 		"clone",
-		url,
-		path,
+	}
+	cmdline = append(cmdline, gitInf.uri, path, "--depth=1")
+	if ! gitInf.defaultBranch {
+		cmdline = append(
+			cmdline,
+			"-b",
+			gitInf.branch,
+		)
 	}
 
 	cmd := exec.Command("git", cmdline...)

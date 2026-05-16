@@ -29,6 +29,15 @@ type elevateRequest struct {
 	err		chan error
 }
 
+// Struct to pass a repo info for a git package
+type gitInfo struct {
+	// Git URI
+	uri		string
+	defaultBranch	bool
+	branch		string
+
+}
+
 type xdg struct {
 	runtimeDir		string
 	confDir			string
@@ -58,6 +67,7 @@ type DependsSection struct {
 	// Source can be either a string of git URL (type git), or repo name (type repo) to download from locally defined repositories.
 	SourceType	string
 	Source		string
+	Branch		string
 	// The build prefix for type git. Defaults to "extra-x86_64-build". Note that this might be empty.
 	BuildPrefix	string
 	Install		bool

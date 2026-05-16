@@ -23,6 +23,9 @@ pkgname		= "portable-packer"
 sourceType	= "repo"
 source		= "archlinuxcn"
 
+# For git sources, a branch could be specified
+# branch	= "whatever"
+
 # Nested dependency.
 #[[depends.depends]]
 #pkgname	= "lib32-mesa"
