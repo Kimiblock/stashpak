@@ -17,7 +17,8 @@ jobs:
     steps:
 
     - name: Install Git and devel
-      run: pacman -Syu base-devel git
+      run: pacman -Syu base-devel git --noconfirm
+      
 
     - name: Checkout with Git
       uses: actions/checkout@v4
