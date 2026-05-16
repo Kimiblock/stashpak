@@ -1,0 +1,39 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+  release:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+
+    - name: Install Git and devel
+      run: pacman -Syu base-devel git --noconfirm
+      
+
+    - name: Checkout with Git
+      uses: actions/checkout@v4
+
+    - name: Set safe directory
+      run: git config --global --add safe.directory .
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version-file: go.mod
+
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
