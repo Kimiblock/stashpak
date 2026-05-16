@@ -29,7 +29,16 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]pkg
 	wg.Wait()
 	switch dep.SourceType {
 		case "git":
-			pth := prepDepRepo(debug, warn, dep.Pkgname, dep.Source)
+			gitInf := gitInfo{
+				uri: dep.Source,
+				branch: dep.Branch,
+			}
+			if len(dep.Branch) > 0 {
+				gitInf.defaultBranch = false
+			} else {
+				gitInf.defaultBranch = true
+			}
+			pth := prepDepRepo(debug, warn, dep.Pkgname, gitInf)
 			var pfx string
 			if len(dep.BuildPrefix) == 0 {
 				pfx = "extra-x86_64-build"

@@ -5,13 +5,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 )
 
 // Prepare a Git repository for dependency building, returns the build directory
-func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string) (string) {
+func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf gitInfo) (string) {
 	errChan := make(chan error, 16)
 	go func () {
 		for sig := range errChan {
@@ -32,17 +33,23 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Pdeathsig:		syscall.SIGTERM,
 	}
+	cmd.Dir = path
 	out, err := cmd.Output()
 	if err != nil {
 		debug.Println("Could not get origin URL of repository:", err)
-		err = getRemoteGit(path, url)
+		err = getRemoteGit(path, gitInf)
 		if err != nil {
 			errChan <- err
 			warn.Println(err)
 		}
-	} else if strings.TrimSpace(string(out)) != url {
-		warn.Println("Repository origin mismatch:", string(out), "!=", url)
-		err := getRemoteGit(path, url)
+	} else if strings.TrimSpace(string(out)) != gitInf.uri {
+		warn.Println(
+			"Repository origin mismatch:",
+			string(out),
+			"!=",
+			gitInf.uri,
+		)
+		err := getRemoteGit(path, gitInf)
 		if err != nil {
 			warn.Println(err)
 			errChan <- err
@@ -61,6 +68,18 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, url string
 	if err != nil {
 		warn.Println("Could not update repository:", err)
 		errChan <- err
+	}
+	if ! gitInf.defaultBranch {
+		cmd := exec.Command("git", "switch", gitInf.branch)
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			warn.Fatalln(
+				"Could not switch to branch",
+				strconv.Quote(gitInf.branch),
+				":", err,
+				)
+		}
 	}
 	close(errChan)
 	return path
