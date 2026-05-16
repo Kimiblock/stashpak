@@ -48,6 +48,7 @@ func getRemoteGit(path string, gitInf gitInfo) error {
 	cmdline := []string{
 		"clone",
 	}
+	cmdline = append(cmdline, gitInf.uri, path, "--depth=1")
 	if ! gitInf.defaultBranch {
 		cmdline = append(
 			cmdline,
@@ -55,9 +56,6 @@ func getRemoteGit(path string, gitInf gitInfo) error {
 			gitInf.branch,
 		)
 	}
-
-	cmdline = append(cmdline, gitInf.uri, path)
-
 
 	cmd := exec.Command("git", cmdline...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{

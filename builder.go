@@ -33,7 +33,6 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Pdeathsig:		syscall.SIGTERM,
 	}
-	cmd.Dir = path
 	out, err := cmd.Output()
 	if err != nil {
 		debug.Println("Could not get origin URL of repository:", err)
@@ -57,6 +56,7 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 	}
 	cleanDir(path, debug, warn)
 	cmdline = []string{
+		"-C", path,
 		"pull",
 	}
 	cmd = exec.Command("git", cmdline...)
@@ -69,10 +69,24 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 		warn.Println("Could not update repository:", err)
 		errChan <- err
 	}
+
 	if ! gitInf.defaultBranch {
-		cmd := exec.Command("git", "switch", gitInf.branch)
+		cmd := exec.Command(
+			"git",
+			"-C", path,
+			"fetch", "origin", gitInf.branch)
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
+		if err != nil {
+			warn.Fatalln(
+				"Could not fetch branch",
+				strconv.Quote(gitInf.branch),
+				":", err,
+				)
+		}
+		cmd = exec.Command("git", "-C", path, "switch", gitInf.branch)
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			warn.Fatalln(
 				"Could not switch to branch",
