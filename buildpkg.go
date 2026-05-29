@@ -148,7 +148,7 @@ func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []pkginfo
 	close(depsChan)
 	depsLock.Lock()
 	depsLock.Unlock()
-	cleanDir(baseDir, debug, warn)
+	//cleanDir(baseDir, debug, warn)
 	var pfx string
 	if len(pkg.Metadata.BuildPrefix) == 0 {
 		pfx = "extra-x86_64-build"

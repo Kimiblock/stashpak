@@ -33,9 +33,7 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 		"origin",
 	}
 	cmd := exec.Command("git", cmdline...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Pdeathsig:		syscall.SIGTERM,
-	}
+	cmd.SysProcAttr = &cmdAttrs
 	out, err := cmd.Output()
 	if err != nil {
 		debug.Println("Could not get origin URL of repository:", err)
@@ -106,6 +104,13 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 // Warning: prefix should be set!
 // pkgname can be empty or base or actual name
 func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, deps []pkginfo) []string {
+	// cmd := exec.Command("pwd")
+	// cmd.Dir = path
+	// out, err := cmd.Output()
+	// cmd = exec.Command("ls")
+	// cmd.Dir = path
+	// outN, err := cmd.Output()
+	// fmt.Println(pkgname, string(out), string(outN))
 	var cancelFunc func ()
 	var lockDone = make(chan bool)
 	var lockTimeout = make(chan bool)
@@ -174,6 +179,7 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 			builder.WriteString("[stdout]: " + scannerOut.Text() + "\n")
 		}
 	})
+	//var err error
 	err := <- elereq.err
 	debug.Println("Finished building", pkgname)
 	pipes.stderrPipe.Close()

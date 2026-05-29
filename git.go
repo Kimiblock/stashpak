@@ -22,7 +22,7 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	err := cmd.Run()
 	if err != nil {
 		warn.Println("Could not reset repository:", err)
-		delPkgs(path, debug, warn)
+		//delPkgs(path, debug, warn)
 	}
 	cmdline = []string{
 		"clean",
@@ -36,7 +36,7 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	err = cmd.Run()
 	if err != nil {
 		warn.Println("Could not clean repository:", err)
-		delPkgs(path, debug, warn)
+		//delPkgs(path, debug, warn)
 	}
 }
 

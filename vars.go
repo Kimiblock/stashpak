@@ -15,7 +15,6 @@ var (
 	cmdAttrs	= syscall.SysProcAttr{
 		Pdeathsig:	syscall.SIGTERM,
 	}
-	showLogs	bool
 )
 
 const (
