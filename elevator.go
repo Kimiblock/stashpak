@@ -9,28 +9,7 @@ import (
 )
 
 func elevator(debug *log.Logger, warn *log.Logger) {
-	var hasLoop bool = true
 	for sig := range elevate {
-		if hasLoop == false {
-			go func () {
-			debug.Println("Starting elevate loop")
-			hasLoop = true
-			time.Sleep(2 * time.Minute)
-			for {
-				ctx := context.TODO()
-				ctxNew, canc := context.WithTimeout(ctx, 5 * time.Second)
-				cmd := exec.CommandContext(ctxNew, conf.elevateProgram, "true")
-				cmd.Stderr = os.Stderr
-				cmd.Stdout = os.Stdout
-				err := cmd.Run()
-				canc()
-				if err != nil {
-					warn.Println("Could not loop elevate status:", err)
-					break
-				}
-			}
-			} ()
-		}
 		signal := sig
 		go func () {
 			var wd string
