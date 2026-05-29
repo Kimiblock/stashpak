@@ -37,13 +37,13 @@ type elevateRequest struct {
 }
 
 type cmdPipe struct {
-	stdinPipe	io.WriteCloser
+	stdinPipe	*io.PipeWriter //io.WriteCloser
 
 	// If not nil, pipes the output to it instead of sending to stdout
-	stdoutPipe	io.ReadCloser
+	stdoutPipe	*io.PipeReader //io.ReadCloser
 
 	// If not nil, pipes the error to it instead of sending to stderr
-	stderrPipe	io.ReadCloser
+	stderrPipe	*io.PipeReader //io.ReadCloser
 }
 
 // Struct to pass a repo info for a git package

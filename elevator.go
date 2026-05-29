@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -79,27 +80,17 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			cmd.Dir = wd
 
 			if signal.wantPipe {
-				inPipe, err := cmd.StdinPipe()
-				if err != nil {
-					warn.Fatalln("Could not pipe stdin:", err)
-					return
-				}
-
-				outPipe, err := cmd.StdoutPipe()
-				if err != nil {
-					warn.Fatalln("Could not pipe stdout:", err)
-					return
-				}
-				errPipe, err := cmd.StderrPipe()
-				if err != nil {
-					warn.Fatalln("Could not pipe stderr:", err)
-					return
-				}
+				inR, inW := io.Pipe()
+				cmd.Stdin = inR
+				outR, outW := io.Pipe()
+				cmd.Stdout = outW
+				errR, errW := io.Pipe()
+				cmd.Stderr = errW
 
 				var pipes cmdPipe
-				pipes.stdinPipe = inPipe
-				pipes.stdoutPipe = outPipe
-				pipes.stderrPipe = errPipe
+				pipes.stdinPipe = inW
+				pipes.stdoutPipe = outR
+				pipes.stderrPipe = errR
 				signal.pipeChan <- pipes
 			} else {
 				cmd.Stderr = os.Stderr
