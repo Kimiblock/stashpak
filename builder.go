@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -112,9 +114,23 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	}
 	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar", "--skippgpcheck")
 	elereq.err = make(chan error, 1)
+	elereq.wantPipe = true
+	elereq.pipeChan = make(chan cmdPipe)
+
 	elevate <- elereq
+	pipes := <- elereq.pipeChan
 	err := <- elereq.err
 	if err != nil {
+		warn.Println("An Error occured while building package:", pkgname)
+		scannerOut := bufio.NewScanner(pipes.stdoutPipe)
+		for scannerOut.Scan() {
+			fmt.Println("[stdout]:", scannerOut.Text())
+		}
+
+		scanner := bufio.NewScanner(pipes.stderrPipe)
+		for scanner.Scan() {
+			fmt.Println("[stderr]:", scanner.Text())
+		}
 		warn.Fatalln("Could not build package", pkgname, ":", err)
 	}
 	ent, err := os.ReadDir(path)
