@@ -150,7 +150,7 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar", "--skippgpcheck")
 	elereq.err = make(chan error, 1)
 	elereq.wantPipe = true
-	elereq.pipeChan = make(chan cmdPipe)
+	elereq.pipeChan = make(chan cmdPipe, 1)
 
 	elevate <- elereq
 	pipes := <- elereq.pipeChan
@@ -175,6 +175,9 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 		}
 	})
 	err := <- elereq.err
+	pipes.stderrPipe.Close()
+	pipes.stdoutPipe.Close()
+	debug.Println("Finished building", pkgname)
 	if err != nil {
 		warn.Println("An Error occured while building package:", pkgname)
 		fmt.Println(builder.String())

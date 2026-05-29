@@ -76,15 +76,15 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			cmd.Dir = wd
 
 			if signal.wantPipe {
-				inR, inW := io.Pipe()
-				cmd.Stdin = inR
+				//inR, inW := io.Pipe()
+				//cmd.Stdin = inR
 				outR, outW := io.Pipe()
 				cmd.Stdout = outW
 				errR, errW := io.Pipe()
 				cmd.Stderr = errW
 
 				var pipes cmdPipe
-				pipes.stdinPipe = inW
+				//pipes.stdinPipe = inW
 				pipes.stdoutPipe = outR
 				pipes.stderrPipe = errR
 				signal.pipeChan <- pipes

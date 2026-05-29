@@ -18,7 +18,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/BurntSushi/toml"
-	alpm "github.com/Jguer/go-alpm/v2"
 )
 
 func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
@@ -391,15 +390,5 @@ func main () {
 	processOpts(debug)
 	go elevator(debug, warn)
 
-	handler, err := alpm.Initialize("/", "/var/lib/pacman")
-	if err != nil {
-		panic("Could not initialize alpm: " + err.Error())
-	}
-	defer handler.Release()
-	db, err := handler.LocalDB()
-	if err != nil {
-		panic("Could not initialize alpm: " + err.Error())
-	}
-	debug.Println("Initialized ALPM handler for database:", db.Name())
 	cmdlineDispatcher(debug, warn)
 }

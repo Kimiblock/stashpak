@@ -15,6 +15,7 @@ var (
 	cmdAttrs	= syscall.SysProcAttr{
 		Pdeathsig:	syscall.SIGTERM,
 	}
+	showLogs	bool
 )
 
 const (
@@ -37,7 +38,7 @@ type elevateRequest struct {
 }
 
 type cmdPipe struct {
-	stdinPipe	*io.PipeWriter //io.WriteCloser
+	//stdinPipe	*io.PipeWriter //io.WriteCloser
 
 	// If not nil, pipes the output to it instead of sending to stdout
 	stdoutPipe	*io.PipeReader //io.ReadCloser
