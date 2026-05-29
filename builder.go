@@ -152,7 +152,7 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	for _, dep := range deps {
 		elereq.cmdline = append(elereq.cmdline, "-I", dep.pkgname)
 	}
-	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar", "--skippgpcheck")
+	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar", "--skippgpcheck", "--nocheck")
 	elereq.err = make(chan error, 1)
 	elereq.wantPipe = true
 	elereq.pipeChan = make(chan cmdPipe, 1)
