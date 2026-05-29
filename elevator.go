@@ -38,20 +38,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 
 		signal := sig
 		go func () {
-			var wd string
-			if len(signal.wd) > 0 {
-				wd = signal.wd
-			} else {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					warn.Fatalln("Could not get user home:", err)
-				}
-				wd = home
-			}
-
 			debug.Println("Starting privileged command:", signal.cmdline)
-			debug.Println("Using working directory:", wd)
-
 			ctx := context.TODO()
 			ctxTimeout, cancelFunc := context.WithTimeout(
 				ctx,
@@ -73,7 +60,10 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			}
 
 			cmd.SysProcAttr = &cmdAttrs
-			cmd.Dir = wd
+			if len(signal.wd) > 0 {
+				cmd.Dir = signal.wd
+				debug.Println("Using working directory:", cmd.Dir)
+			}
 
 			if signal.wantPipe {
 				//inR, inW := io.Pipe()
