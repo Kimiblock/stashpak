@@ -162,7 +162,7 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 			warn.Fatalln("Could not pipe output:", scanner.Err())
 		}
 		for scanner.Scan() {
-			builder.WriteString("[stdout]: " + scanner.Text() + "\n")
+			builder.WriteString("[stderr]: " + scanner.Text() + "\n")
 		}
 	})
 	wg.Go(func() {
@@ -175,9 +175,10 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 		}
 	})
 	err := <- elereq.err
+	debug.Println("Finished building", pkgname)
 	pipes.stderrPipe.Close()
 	pipes.stdoutPipe.Close()
-	debug.Println("Finished building", pkgname)
+
 	if err != nil {
 		warn.Println("An Error occured while building package:", pkgname)
 		fmt.Println(builder.String())
