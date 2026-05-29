@@ -34,6 +34,7 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 					err,
 				)
 			}
+			hasAsked = true
 			askLock.Unlock()
 		} else {
 			askLock.RUnlock()
