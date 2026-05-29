@@ -102,8 +102,6 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				warn.Println("Elevated command has failed:", err)
 				signal.err <- err
 				return
-			} else {
-				signal.err <- nil
 			}
 			cancelFunc()
 
