@@ -6,27 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 	"syscall"
 )
 
 // Obtain a file lock, caller should call cancelFunc
-func obtainLock(debug *log.Logger, warn *log.Logger, operationName string) (cancelFunc func () ()) {
+func obtainLock(operationName string) (func () (), error) {
 	path := filepath.Join(xdgDir.stateHome, "StashPak", operationName, ".lock")
 	err := os.MkdirAll(filepath.Dir(path), 0700)
 	if err != nil {
-		warn.Fatalln("Could not obtain lock:", err)
+		return nil, err
 	}
 	type result struct {
-		timeout		bool
+		err		error
 	}
 	resChan := make(chan result, 2)
-	go func () {
-		time.Sleep(1 * time.Minute)
-		resChan <- result{
-			timeout: true,
-		}
-	} ()
 	var file *os.File
 	go func () {
 		file, err = os.OpenFile(
@@ -34,31 +27,27 @@ func obtainLock(debug *log.Logger, warn *log.Logger, operationName string) (canc
 			os.O_CREATE|os.O_RDWR,
 			0700,
 		)
-		if err != nil {
-			warn.Fatalln("Could not obtain lock:", err)
-		}
-		resChan <- result{
-			timeout: false,
+		resChan <- result {
+			err:	err,
 		}
 	} ()
 	for sig := range resChan {
-		if sig.timeout {
-			warn.Println("Waiting for file lock to release:", path)
-		} else {
-			break
+		if sig.err != nil {
+			return nil, sig.err
 		}
+		break
 	}
 	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
 	if err != nil {
-		warn.Fatalln("Could not obtain lock:", err)
+		return nil, err
 	}
 	return func() {
 		err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
 		if err != nil {
-			warn.Fatalln("Could not release lock:", err)
+			panic("Could not release lock: " + err.Error())
 		}
 		file.Close()
-	}
+	}, nil
 }
 
 // Deletes package files in a directory

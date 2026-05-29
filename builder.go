@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 // Prepare a Git repository for dependency building, returns the build directory
@@ -105,6 +106,40 @@ func prepDepRepo(debug *log.Logger, warn *log.Logger, pkgname string, gitInf git
 // Warning: prefix should be set!
 // pkgname can be empty or base or actual name
 func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, prefix string, deps []pkginfo) []string {
+	var cancelFunc func ()
+	var lockDone = make(chan bool)
+	var lockTimeout = make(chan bool)
+
+	go func () {
+		time.Sleep(90 * time.Second)
+		lockTimeout <- true
+	} ()
+
+	go func() {
+		defer func () {lockDone <- true} ()
+		var err error
+		cancelFunc, err = obtainLock(
+			"build" + pkgname,
+		)
+		if err != nil {
+			warn.Fatalln("Could not lock build path:", err)
+		}
+	} ()
+
+	var locked bool
+
+	select {
+		case <- lockDone:
+			locked = true
+		case <- lockTimeout:
+			warn.Println("Waited 90 seconds for build directory to lock")
+	}
+
+	if ! locked {
+		<- lockDone
+	}
+	defer cancelFunc()
+
 	debug.Println("Building package", pkgname, "with dependency list:", deps)
 	var elereq elevateRequest
 	elereq.wd = path
