@@ -49,7 +49,14 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 }
 
 func validateConf (path string, warn *log.Logger) []error {
-	errChan := make(chan error, 32)
+	errChan := make(chan error, 16)
+	var ret []error
+	var errWg sync.WaitGroup
+	errWg.Go(func() {
+		for sig := range errChan {
+			ret = append(ret, sig)
+		}
+	})
 	con, err := decodeConf(path, warn)
 	if err != nil {
 		return []error{err}
@@ -118,10 +125,7 @@ func validateConf (path string, warn *log.Logger) []error {
 		wg.Wait()
 		close(errChan)
 	} ()
-	var ret []error
-	for sig := range errChan {
-		ret = append(ret, sig)
-	}
+	errWg.Wait()
 	return ret
 }
 
