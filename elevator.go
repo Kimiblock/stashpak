@@ -20,13 +20,11 @@ func askRoot() error {
 
 func elevator(debug *log.Logger, warn *log.Logger) {
 	var hasAsked bool
-	var askLock sync.RWMutex
+	var askLock sync.Mutex
 
 	for sig := range elevate {
-		askLock.RLock()
+		askLock.Lock()
 		if ! hasAsked {
-			askLock.RUnlock()
-			askLock.Lock()
 			err := askRoot()
 			if err != nil {
 				warn.Fatalln(
@@ -35,10 +33,8 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				)
 			}
 			hasAsked = true
-			askLock.Unlock()
-		} else {
-			askLock.RUnlock()
 		}
+		askLock.Unlock()
 
 		signal := sig
 		go func () {
@@ -61,7 +57,6 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 				ctx,
 				signal.timeout,
 			)
-			defer cancelFunc()
 			var cmd *exec.Cmd
 
 			if signal.timeout == 0 {
@@ -99,12 +94,12 @@ func elevator(debug *log.Logger, warn *log.Logger) {
 			}
 
 			err := cmd.Start()
+			defer cancelFunc()
 			if err != nil {
 				warn.Println("Elevated command has failed:", err)
 				signal.err <- err
 				return
 			}
-			cancelFunc()
 
 			err = cmd.Wait()
 

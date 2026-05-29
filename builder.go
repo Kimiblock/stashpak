@@ -154,18 +154,30 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 
 	elevate <- elereq
 	pipes := <- elereq.pipeChan
+	var wg sync.WaitGroup
+	var builder strings.Builder
+	wg.Go(func() {
+		scanner := bufio.NewScanner(pipes.stderrPipe)
+		if scanner.Err() != nil {
+			warn.Fatalln("Could not pipe output:", scanner.Err())
+		}
+		for scanner.Scan() {
+			builder.WriteString("[stdout]: " + scanner.Text() + "\n")
+		}
+	})
+	wg.Go(func() {
+		scannerOut := bufio.NewScanner(pipes.stdoutPipe)
+		if scannerOut.Err() != nil {
+			warn.Fatalln("Could not pipe output:", scannerOut.Err())
+		}
+		for scannerOut.Scan() {
+			builder.WriteString("[stdout]: " + scannerOut.Text() + "\n")
+		}
+	})
 	err := <- elereq.err
 	if err != nil {
 		warn.Println("An Error occured while building package:", pkgname)
-		scannerOut := bufio.NewScanner(pipes.stdoutPipe)
-		for scannerOut.Scan() {
-			fmt.Println("[stdout]:", scannerOut.Text())
-		}
-
-		scanner := bufio.NewScanner(pipes.stderrPipe)
-		for scanner.Scan() {
-			fmt.Println("[stderr]:", scanner.Text())
-		}
+		fmt.Println(builder.String())
 		warn.Fatalln("Could not build package", pkgname, ":", err)
 	}
 	ent, err := os.ReadDir(path)
@@ -176,7 +188,6 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 			list = append(list, pkg)
 		}
 	} ()
-	var wg sync.WaitGroup
 	for _, info := range ent {
 		wg.Go(func() {
 			if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
