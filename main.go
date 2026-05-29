@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -66,8 +67,13 @@ func validateConf (path string, warn *log.Logger) []error {
 		}
 	})
 
+	var allPkgs []string
+	var pkglstLck sync.Mutex
 
-	for _, stru := range con.Depends {
+
+
+	for _, depInf := range con.Depends {
+		stru := depInf
 		wg.Go(func() {
 			_, err = exec.LookPath(stru.BuildPrefix)
 			if err != nil {
@@ -75,6 +81,15 @@ func validateConf (path string, warn *log.Logger) []error {
 			}
 			if len(stru.Pkgname) == 0 {
 				errChan <- errors.New("Invalid package name")
+			} else {
+				pkglstLck.Lock()
+				if slices.Contains(allPkgs, stru.Pkgname) {
+					errChan <- errors.New(
+						"Duplicated package: " + stru.Pkgname,
+					)
+				}
+				allPkgs = append(allPkgs, stru.Pkgname)
+				pkglstLck.Unlock()
 			}
 			switch stru.SourceType {
 				case "git":
