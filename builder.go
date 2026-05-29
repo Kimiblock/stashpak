@@ -185,22 +185,21 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 		warn.Fatalln("Could not build package", pkgname, ":", err)
 	}
 	ent, err := os.ReadDir(path)
-	var listChan = make(chan string, 10)
+	var listLock sync.Mutex
 	var list []string
-	go func () {
-		for pkg := range listChan {
-			list = append(list, pkg)
-		}
-	} ()
 	for _, info := range ent {
 		wg.Go(func() {
 			if strings.Contains(info.Name(), ".pkg") && ! strings.HasSuffix(info.Name(), ".log") && info.IsDir() == false {
-				listChan <- filepath.Join(path, info.Name())
+				listLock.Lock()
+				list = append(
+					list,
+					filepath.Join(path, info.Name()),
+				)
+				listLock.Unlock()
 			}
 		})
 	}
 	wg.Wait()
-	close(listChan)
-	debug.Println("Built package", pkgname)
+	debug.Println("Built package", pkgname, list)
 	return list
 }
