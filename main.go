@@ -73,37 +73,50 @@ func validateConf (path string, warn *log.Logger) []error {
 			errChan <-  errors.New("Maintainer not set")
 		}
 	})
+	var pkgsChan = make(chan string, 16)
+	wg.Go(func() {
+		var pkgs []string
+		for pkg := range pkgsChan {
+			if slices.Contains(pkgs, pkg) {
+				errChan <- errors.New(
+						"Duplicated package: " + pkg,
+				)
+			} else {
+				pkgs = append(pkgs, pkg)
+			}
+		}
+	})
+	checkDepSec(con.Depends, errChan, pkgsChan)
+	close(pkgsChan)
+	wg.Wait()
+	close(errChan)
+	errWg.Wait()
+	return ret
+}
 
-	var allPkgs []string
-	var pkglstLck sync.Mutex
-
-
-
-	for _, depInf := range con.Depends {
+// Check depends section for errors
+func checkDepSec(deps []DependsSection, errChan chan error, pkgsChan chan string) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for _, depInf := range deps {
 		stru := depInf
 		wg.Go(func() {
-			_, err = exec.LookPath(stru.BuildPrefix)
+			checkDepSec(stru.Depends, errChan, pkgsChan)
+			_, err := exec.LookPath(stru.BuildPrefix)
 			if err != nil {
 				errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
 			}
 			if len(stru.Pkgname) == 0 {
 				errChan <- errors.New("Invalid package name")
 			} else {
-				pkglstLck.Lock()
-				if slices.Contains(allPkgs, stru.Pkgname) {
-					errChan <- errors.New(
-						"Duplicated package: " + stru.Pkgname,
-					)
-				}
-				allPkgs = append(allPkgs, stru.Pkgname)
-				pkglstLck.Unlock()
+				pkgsChan <- stru.Pkgname
 			}
 			switch stru.SourceType {
 				case "git":
 					args := []string{"ls-remote", stru.Source}
 					cmd := exec.Command("git", args...)
 					cmd.Stderr = os.Stderr
-					err := cmd.Run()
+					//err := cmd.Run()
 					if err != nil {
 						errChan <- errors.New("Could not get status of " + err.Error())
 					}
@@ -117,16 +130,7 @@ func validateConf (path string, warn *log.Logger) []error {
 					}
 			}
 		})
-
 	}
-
-
-	go func () {
-		wg.Wait()
-		close(errChan)
-	} ()
-	errWg.Wait()
-	return ret
 }
 
 // Returns the absolute location of a package file
