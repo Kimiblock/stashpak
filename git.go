@@ -22,7 +22,7 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	err := cmd.Run()
 	if err != nil {
 		warn.Println("Could not reset repository:", err)
-		delPkgs(path, debug, warn)
+		//delPkgs(path, debug, warn)
 	}
 	cmdline = []string{
 		"clean",
@@ -36,12 +36,15 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	err = cmd.Run()
 	if err != nil {
 		warn.Println("Could not clean repository:", err)
-		delPkgs(path, debug, warn)
+		//delPkgs(path, debug, warn)
 	}
 }
 
 func getRemoteGit(path string, gitInf gitInfo) error {
-	err := os.RemoveAll(path)
+	cancelFunc, err := obtainLock("git" + path + gitInf.branch)
+	defer cancelFunc()
+
+	err = os.RemoveAll(path)
 	if os.IsNotExist(err) {} else if err != nil {
 		return errors.New("Could not remove previous repository: " + err.Error())
 	}
@@ -72,7 +75,10 @@ func getRemoteGit(path string, gitInf gitInfo) error {
 }
 
 func updateRepo(debug *log.Logger, warn *log.Logger) {
-	cancelFunc := obtainLock(debug, warn, "repo")
+	cancelFunc, err := obtainLock("repo")
+	if err != nil {
+		warn.Fatalln("Could not lock repo:", err)
+	}
 	defer cancelFunc()
 	path := filepath.Join(
 		xdgDir.cacheDir,
@@ -83,7 +89,7 @@ func updateRepo(debug *log.Logger, warn *log.Logger) {
 		xdgDir.cacheDir,
 		"stashpak",
 	)
-	_, err := os.Stat(path)
+	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
 		err = os.MkdirAll(wd, 0700)
 		if err != nil {

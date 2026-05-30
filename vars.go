@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"sync"
 	"syscall"
 	"time"
@@ -27,6 +28,22 @@ type elevateRequest struct {
 	timeout		time.Duration
 	wd		string
 	err		chan error
+
+	// If true, will return pipes for stdin, stdout, stderr in pipeChan
+	wantPipe	bool
+
+	pipeChan	chan(cmdPipe)
+
+}
+
+type cmdPipe struct {
+	//stdinPipe	*io.PipeWriter //io.WriteCloser
+
+	// If not nil, pipes the output to it instead of sending to stdout
+	stdoutPipe	*io.PipeReader //io.ReadCloser
+
+	// If not nil, pipes the error to it instead of sending to stderr
+	stderrPipe	*io.PipeReader //io.ReadCloser
 }
 
 // Struct to pass a repo info for a git package

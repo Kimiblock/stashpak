@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/BurntSushi/toml"
-	alpm "github.com/Jguer/go-alpm/v2"
 )
 
 func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
@@ -48,7 +48,14 @@ func decodeConf (path string, warn *log.Logger) (pkgConf, error) {
 }
 
 func validateConf (path string, warn *log.Logger) []error {
-	errChan := make(chan error, 32)
+	errChan := make(chan error, 16)
+	var ret []error
+	var errWg sync.WaitGroup
+	errWg.Go(func() {
+		for sig := range errChan {
+			ret = append(ret, sig)
+		}
+	})
 	con, err := decodeConf(path, warn)
 	if err != nil {
 		return []error{err}
@@ -65,23 +72,50 @@ func validateConf (path string, warn *log.Logger) []error {
 			errChan <-  errors.New("Maintainer not set")
 		}
 	})
+	var pkgsChan = make(chan string, 16)
+	wg.Go(func() {
+		var pkgs []string
+		for pkg := range pkgsChan {
+			if slices.Contains(pkgs, pkg) {
+				errChan <- errors.New(
+						"Duplicated package: " + pkg,
+				)
+			} else {
+				pkgs = append(pkgs, pkg)
+			}
+		}
+	})
+	checkDepSec(con.Depends, errChan, pkgsChan)
+	close(pkgsChan)
+	wg.Wait()
+	close(errChan)
+	errWg.Wait()
+	return ret
+}
 
-
-	for _, stru := range con.Depends {
+// Check depends section for errors
+func checkDepSec(deps []DependsSection, errChan chan error, pkgsChan chan string) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for _, depInf := range deps {
+		stru := depInf
 		wg.Go(func() {
-			_, err = exec.LookPath(stru.BuildPrefix)
+			checkDepSec(stru.Depends, errChan, pkgsChan)
+			_, err := exec.LookPath(stru.BuildPrefix)
 			if err != nil {
 				errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
 			}
 			if len(stru.Pkgname) == 0 {
 				errChan <- errors.New("Invalid package name")
+			} else {
+				pkgsChan <- stru.Pkgname
 			}
 			switch stru.SourceType {
 				case "git":
 					args := []string{"ls-remote", stru.Source}
 					cmd := exec.Command("git", args...)
 					cmd.Stderr = os.Stderr
-					err := cmd.Run()
+					//err := cmd.Run()
 					if err != nil {
 						errChan <- errors.New("Could not get status of " + err.Error())
 					}
@@ -95,19 +129,7 @@ func validateConf (path string, warn *log.Logger) []error {
 					}
 			}
 		})
-
 	}
-
-
-	go func () {
-		wg.Wait()
-		close(errChan)
-	} ()
-	var ret []error
-	for sig := range errChan {
-		ret = append(ret, sig)
-	}
-	return ret
 }
 
 // Returns the absolute location of a package file
@@ -266,13 +288,11 @@ func buildRepoPkgs(debug *log.Logger, warn *log.Logger, pkgs []string) error {
 		}
 	} ()
 	for _, pkg := range pkgs {
-		cancelFunc := obtainLock(debug, warn, "repo")
 		pkgsChan <- buildPackage(
 			filepath.Join(baseDir, pkg),
 			debug,
 			warn,
 		)
-		cancelFunc()
 	}
 
 	wg.Wait()
@@ -370,15 +390,5 @@ func main () {
 	processOpts(debug)
 	go elevator(debug, warn)
 
-	handler, err := alpm.Initialize("/", "/var/lib/pacman")
-	if err != nil {
-		panic("Could not initialize alpm: " + err.Error())
-	}
-	defer handler.Release()
-	db, err := handler.LocalDB()
-	if err != nil {
-		panic("Could not initialize alpm: " + err.Error())
-	}
-	debug.Println("Initialized ALPM handler for database:", db.Name())
 	cmdlineDispatcher(debug, warn)
 }
