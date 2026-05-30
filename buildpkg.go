@@ -103,7 +103,7 @@ func resolveDeps(dep DependsSection, debug *log.Logger, warn *log.Logger) ([]pkg
 	return deps
 }
 
-// The new-style builder function for building a package
+// The new-style builder function for building a package with its deps
 func buildPackage(baseDir string, debug *log.Logger, warn *log.Logger) []pkginfo {
 	var wg sync.WaitGroup
 	var ret []pkginfo

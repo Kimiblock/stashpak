@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -108,7 +109,7 @@ func instSlice(pkgslice []pkginfo, debug *log.Logger, warn *log.Logger) {
 	elereq.cmdline = []string{"pacman", "--noconfirm", "-U"}
 	var pkgs []string
 	for _, pkg := range pkgslice {
-		if pkg.install {
+		if pkg.install && ! slices.Contains(pkgs, pkg.pkgname) {
 			debug.Println("Adding package", pkg.pkgname, "to list")
 			pkgs = append(pkgs, pkg.pkgname)
 		}
