@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,7 +151,14 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	elereq.wd = path
 	elereq.cmdline = []string{prefix, "--"}
 	for _, dep := range deps {
-		elereq.cmdline = append(elereq.cmdline, "-I", dep.pkgname)
+		if ! slices.Contains(elereq.cmdline, dep.pkgname) {
+			elereq.cmdline = append(
+				elereq.cmdline,
+				"-I", dep.pkgname,
+			)
+		} else {
+			warn.Println("Dependency", dep, "specified more than once")
+		}
 	}
 	elereq.cmdline = append(elereq.cmdline, "--", "PKGEXT=.pkg.tar", "--skippgpcheck", "--nocheck")
 	elereq.err = make(chan error, 1)
