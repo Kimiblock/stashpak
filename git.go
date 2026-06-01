@@ -35,7 +35,7 @@ func cleanDir(path string, debug *log.Logger, warn *log.Logger) {
 	}
 	err = cmd.Run()
 	if err != nil {
-		warn.Println("Could not clean repository:", err)
+		warn.Println("Could not clean repository, you may encounter duplicated targets:", err)
 		//delPkgs(path, debug, warn)
 	}
 }
