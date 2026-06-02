@@ -146,6 +146,7 @@ func build(debug *log.Logger, warn *log.Logger, pkgname string, path string, pre
 	}
 	defer cancelFunc()
 
+	cleanDir(path, debug, warn)
 	debug.Println("Building package", pkgname, "with dependency list:", deps)
 	var elereq elevateRequest
 	elereq.wd = path
