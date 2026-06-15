@@ -102,6 +102,9 @@ func checkDepSec(deps []DependsSection, errChan chan error, pkgsChan chan string
 		wg.Go(func() {
 			checkDepSec(stru.Depends, errChan, pkgsChan)
 			_, err := exec.LookPath(stru.BuildPrefix)
+			if stru.SourceType == "repo" {
+				err = nil
+			}
 			if err != nil {
 				errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
 			}
