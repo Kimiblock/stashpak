@@ -104,10 +104,12 @@ func checkDepSec(deps []DependsSection, errChan chan error, pkgsChan chan string
 			_, err := exec.LookPath(stru.BuildPrefix)
 			if stru.SourceType == "repo" {
 				err = nil
+			} else {
+				if err != nil {
+					errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
+				}
 			}
-			if err != nil {
-				errChan <- errors.New("Build prefix for " + stru.Pkgname + " invalid: " + err.Error())
-			}
+
 			if len(stru.Pkgname) == 0 {
 				errChan <- errors.New("Invalid package name")
 			} else {
